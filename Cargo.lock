@@ -2043,6 +2043,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ruff_allocator"
+version = "0.0.0"
+dependencies = [
+ "bumpalo",
+]
+
+[[package]]
 name = "ruff_benchmark"
 version = "0.0.0"
 dependencies = [
@@ -2050,11 +2057,8 @@ dependencies = [
  "criterion",
  "mimalloc",
  "once_cell",
- "red_knot",
- "ruff_db",
- "ruff_linter",
+ "ruff_allocator",
  "ruff_python_ast",
- "ruff_python_formatter",
  "ruff_python_parser",
  "ruff_python_trivia",
  "serde",
@@ -2275,6 +2279,7 @@ dependencies = [
  "is-macro",
  "itertools 0.13.0",
  "once_cell",
+ "ruff_allocator",
  "ruff_cache",
  "ruff_macros",
  "ruff_python_trivia",
@@ -2371,6 +2376,7 @@ dependencies = [
  "compact_str",
  "insta",
  "memchr",
+ "ruff_allocator",
  "ruff_python_ast",
  "ruff_python_trivia",
  "ruff_source_file",
