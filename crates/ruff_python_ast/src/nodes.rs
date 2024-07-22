@@ -1144,7 +1144,7 @@ impl Deref for FStringLiteralElement<'_> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        &self.value
+        self.value
     }
 }
 
@@ -1954,7 +1954,7 @@ impl Deref for StringLiteral<'_> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        &self.value
+        self.value
     }
 }
 
@@ -2299,7 +2299,7 @@ impl Deref for BytesLiteral<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &self.value
+        self.value
     }
 }
 
@@ -2748,7 +2748,7 @@ pub struct ExprName<'ast> {
 
 impl<'ast> ExprName<'ast> {
     pub fn id(&self) -> &'ast str {
-        &self.id
+        self.id
     }
 }
 
@@ -3793,7 +3793,7 @@ impl<'ast> Identifier<'ast> {
     }
 
     pub fn id(&self) -> &'ast str {
-        &self.id
+        self.id
     }
 
     pub fn is_valid(&self) -> bool {

@@ -47,7 +47,7 @@ pub(super) fn pattern_to_expr<'ast>(
             let mut elements = ruff_allocator::Vec::with_capacity_in(patterns.len(), allocator);
             elements.extend(
                 (**patterns)
-                    .into_iter()
+                    .iter()
                     .map(|pattern| pattern_to_expr(pattern, allocator)),
             );
 
@@ -67,7 +67,7 @@ pub(super) fn pattern_to_expr<'ast>(
                 ruff_allocator::Vec::with_capacity_in(keys.len() + patterns.len(), allocator);
             items.extend(
                 (**keys)
-                    .into_iter()
+                    .iter()
                     .zip(patterns.iter())
                     .map(|(key, pattern)| ast::DictItem {
                         key: Some(key.clone_in(allocator)),
@@ -145,7 +145,7 @@ pub(super) fn pattern_to_expr<'ast>(
                 id: "",
                 ctx: ExprContext::Invalid,
             }),
-            (Some(pattern), None) => pattern_to_expr(*pattern, allocator),
+            (Some(pattern), None) => pattern_to_expr(pattern, allocator),
             (None, Some(name)) => Expr::Name(ast::ExprName {
                 range: name.range,
                 id: name.id,
@@ -165,7 +165,7 @@ pub(super) fn pattern_to_expr<'ast>(
                 right: allocator.alloc(pattern_to_expr(right, allocator)),
             };
 
-            let mut iter = (**patterns).into_iter();
+            let mut iter = (**patterns).iter();
 
             match (iter.next(), iter.next()) {
                 (Some(left), Some(right)) => {

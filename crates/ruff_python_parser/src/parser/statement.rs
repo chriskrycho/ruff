@@ -670,7 +670,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let start = self.node_start();
 
         let id = self.parse_identifier().id;
-        let mut dotted_name = ruff_allocator::String::from_str_in(id, &self.allocator);
+        let mut dotted_name = ruff_allocator::String::from_str_in(id, self.allocator);
         let mut progress = ParserProgress::default();
 
         while self.eat(TokenKind::Dot) {
@@ -1016,7 +1016,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             );
         }
 
-        let mut value = ruff_allocator::String::new_in(&self.allocator);
+        let mut value = ruff_allocator::String::new_in(self.allocator);
         unparse_expr(self, &parsed_expr.expr, &mut value);
 
         ast::StmtIpyEscapeCommand {
@@ -3241,7 +3241,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         match expr {
             Expr::Starred(ast::ExprStarred { value, .. }) => self.validate_assignment_target(value),
             Expr::List(ast::ExprList { elts, .. }) | Expr::Tuple(ast::ExprTuple { elts, .. }) => {
-                for expr in elts.iter() {
+                for expr in elts {
                     self.validate_assignment_target(expr);
                 }
             }
@@ -3281,7 +3281,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     fn validate_delete_target(&mut self, expr: &Expr<'ast>) {
         match expr {
             Expr::List(ast::ExprList { elts, .. }) | Expr::Tuple(ast::ExprTuple { elts, .. }) => {
-                for expr in elts.iter() {
+                for expr in elts {
                     self.validate_delete_target(expr);
                 }
             }

@@ -511,10 +511,10 @@ pub fn walk_pattern_arguments<'a, 'ast, V>(
 {
     let node = AnyNodeRef::from(pattern_arguments);
     if visitor.enter_node(node).is_traverse() {
-        for pattern in pattern_arguments.patterns.iter() {
+        for pattern in &pattern_arguments.patterns {
             visitor.visit_pattern(pattern);
         }
-        for keyword in pattern_arguments.keywords.iter() {
+        for keyword in &pattern_arguments.keywords {
             visitor.visit_pattern_keyword(keyword);
         }
     }

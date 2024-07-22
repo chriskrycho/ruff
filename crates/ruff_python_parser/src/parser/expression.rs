@@ -659,8 +659,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let start = self.node_start();
         self.bump(TokenKind::Lpar);
 
-        let mut args = ruff_allocator::Vec::new_in(&self.allocator);
-        let mut keywords = ruff_allocator::Vec::new_in(&self.allocator);
+        let mut args = ruff_allocator::Vec::new_in(self.allocator);
+        let mut keywords = ruff_allocator::Vec::new_in(self.allocator);
         let mut seen_keyword_argument = false; // foo = 1
         let mut seen_keyword_unpacking = false; // **foo
 
@@ -1046,8 +1046,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     ) -> ast::ExprCompare<'ast> {
         self.bump_cmp_op(op);
 
-        let mut comparators = ruff_allocator::Vec::new_in(&self.allocator);
-        let mut operators = ruff_allocator::Vec::new_in(&self.allocator);
+        let mut comparators = ruff_allocator::Vec::new_in(self.allocator);
+        let mut operators = ruff_allocator::Vec::new_in(self.allocator);
         operators.push(op);
 
         let mut progress = ParserProgress::default();
@@ -1270,7 +1270,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             unreachable!()
         };
 
-        match parse_string_literal(&value, flags, range, self.allocator) {
+        match parse_string_literal(value, flags, range, self.allocator) {
             Ok(string) => string,
             Err(error) => {
                 let location = error.location();
@@ -1291,7 +1291,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     // 'hello \N{INVALID} world'
                     // """hello \N{INVALID} world"""
                     StringType::Str(ast::StringLiteral {
-                        value: "".into(),
+                        value: "",
                         range,
                         flags: ast::StringLiteralFlags::from(flags).with_invalid(),
                     })
@@ -1351,7 +1351,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                         unreachable!()
                     };
                     FStringElement::Literal(
-                        parse_fstring_literal_element(&value, flags, range, self.allocator)
+                        parse_fstring_literal_element(value, flags, range, self.allocator)
                             .unwrap_or_else(|lex_error| {
                                 // test_err invalid_fstring_literal_element
                                 // f'hello \N{INVALID} world'
@@ -1362,7 +1362,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                                     location,
                                 );
                                 ast::FStringLiteralElement {
-                                    value: "".into(),
+                                    value: "",
                                     range,
                                 }
                             }),
@@ -1442,7 +1442,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 let TokenValue::Name(name) = self.bump_value(TokenKind::Name) else {
                     unreachable!();
                 };
-                match &*name {
+                match name {
                     "s" => ConversionFlag::Str,
                     "r" => ConversionFlag::Repr,
                     "a" => ConversionFlag::Ascii,

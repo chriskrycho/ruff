@@ -55,7 +55,7 @@ pub fn walk_stmt<'a, 'ast, V: StatementVisitor<'a, 'ast> + ?Sized>(
             ..
         }) => {
             visitor.visit_body(body);
-            for clause in elif_else_clauses.iter() {
+            for clause in elif_else_clauses {
                 visitor.visit_elif_else_clause(clause);
             }
         }

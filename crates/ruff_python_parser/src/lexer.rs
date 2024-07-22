@@ -1722,8 +1722,8 @@ mod tests {
         }
     }
 
-    fn lex<'source, 'ast>(
-        source: &'source str,
+    fn lex<'ast>(
+        source: &str,
         mode: Mode,
         start_offset: TextSize,
         allocator: &'ast Allocator,
@@ -1831,7 +1831,7 @@ mod tests {
         allocator: &'ast Allocator,
     ) -> LexerOutput<'ast> {
         let source = format!("%matplotlib \\{eol}  --inline");
-        lex_jupyter_source(&source, &allocator)
+        lex_jupyter_source(&source, allocator)
     }
 
     #[test]
@@ -1864,7 +1864,7 @@ mod tests {
         allocator: &'ast Allocator,
     ) -> LexerOutput<'ast> {
         let source = format!("%matplotlib \\{eol}");
-        lex_jupyter_source(&source, &allocator)
+        lex_jupyter_source(&source, allocator)
     }
 
     #[test]
@@ -2051,7 +2051,7 @@ def f(arg=%timeit a = b):
 
     fn comment_until_eol<'ast>(eol: &str, allocator: &'ast Allocator) -> LexerOutput<'ast> {
         let source = format!("123  # Foo{eol}456");
-        lex_source(&source, &allocator)
+        lex_source(&source, allocator)
     }
 
     #[test]
@@ -2081,7 +2081,7 @@ def f(arg=%timeit a = b):
 
     fn indentation_with_eol<'ast>(eol: &str, allocator: &'ast Allocator) -> LexerOutput<'ast> {
         let source = format!("def foo():{eol}    return 99{eol}{eol}");
-        lex_source(&source, &allocator)
+        lex_source(&source, allocator)
     }
 
     #[test]
@@ -2104,7 +2104,7 @@ def f(arg=%timeit a = b):
 
     fn double_dedent_with_eol<'ast>(eol: &str, allocator: &'ast Allocator) -> LexerOutput<'ast> {
         let source = format!("def foo():{eol} if x:{eol}{eol}  return 99{eol}{eol}");
-        lex_source(&source, &allocator)
+        lex_source(&source, allocator)
     }
 
     #[test]
@@ -2130,7 +2130,7 @@ def f(arg=%timeit a = b):
         allocator: &'ast Allocator,
     ) -> LexerOutput<'ast> {
         let source = format!("def foo():{eol}\tif x:{eol}{eol}\t\t return 99{eol}{eol}");
-        lex_source(&source, &allocator)
+        lex_source(&source, allocator)
     }
 
     #[test]
@@ -2175,7 +2175,7 @@ if first:
 7}]
 "
         .replace('\n', eol);
-        lex_source(&source, &allocator)
+        lex_source(&source, allocator)
     }
 
     #[test]
@@ -2235,7 +2235,7 @@ if first:
         allocator: &'ast Allocator,
     ) -> LexerOutput<'ast> {
         let source = format!("\"abc\\{eol}def\"");
-        lex_source(&source, &allocator)
+        lex_source(&source, allocator)
     }
 
     #[test]
@@ -2279,7 +2279,7 @@ if first:
 
     fn triple_quoted_eol<'ast>(eol: &str, allocator: &'ast Allocator) -> LexerOutput<'ast> {
         let source = format!("\"\"\"{eol} test string{eol} \"\"\"");
-        lex_source(&source, &allocator)
+        lex_source(&source, allocator)
     }
 
     #[test]
@@ -2359,7 +2359,7 @@ if first:
         allocator: &'ast Allocator,
     ) -> LexerOutput<'ast> {
         let source = format!(r"f'text \{eol} more text'");
-        lex_source(&source, &allocator)
+        lex_source(&source, allocator)
     }
 
     #[test]

@@ -244,7 +244,7 @@ impl<'source, 'ast> StringParser<'source, 'ast> {
         // Fast-path: if the f-string doesn't contain any escape sequences, return the literal.
         let Some(mut index) = memchr::memchr3(b'{', b'}', b'\\', self.source.as_bytes()) else {
             return Ok(ast::FStringLiteralElement {
-                value: self.allocator.alloc_str(&self.source),
+                value: self.allocator.alloc_str(self.source),
                 range: self.range,
             });
         };
@@ -458,8 +458,8 @@ impl<'source, 'ast> StringParser<'source, 'ast> {
     }
 }
 
-pub(crate) fn parse_string_literal<'source, 'ast>(
-    source: &'source str,
+pub(crate) fn parse_string_literal<'ast>(
+    source: &str,
     flags: AnyStringFlags,
     range: TextRange,
     allocator: &'ast Allocator,
@@ -505,7 +505,7 @@ mod tests {
 
     fn string_parser_escaped_eol<'ast>(eol: &str, allocator: &'ast Allocator) -> Suite<'ast> {
         let source = format!(r"'text \{eol}more text'");
-        parse_suite(&source, &allocator).unwrap()
+        parse_suite(&source, allocator).unwrap()
     }
 
     #[test]

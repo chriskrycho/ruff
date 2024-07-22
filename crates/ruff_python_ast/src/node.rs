@@ -781,7 +781,7 @@ impl<'ast> AstNode<'ast> for ast::StmtFunctionDef<'ast> {
             ..
         } = self;
 
-        for decorator in decorator_list.iter() {
+        for decorator in decorator_list {
             visitor.visit_decorator(decorator);
         }
 
@@ -845,7 +845,7 @@ impl<'ast> AstNode<'ast> for ast::StmtClassDef<'ast> {
             ..
         } = self;
 
-        for decorator in decorator_list.iter() {
+        for decorator in decorator_list {
             visitor.visit_decorator(decorator);
         }
 
@@ -943,7 +943,7 @@ impl<'ast> AstNode<'ast> for ast::StmtDelete<'ast> {
         V: SourceOrderVisitor<'a, 'ast> + ?Sized,
     {
         let ast::StmtDelete { targets, range: _ } = self;
-        for expr in targets.iter() {
+        for expr in targets {
             visitor.visit_expr(expr);
         }
     }
@@ -1044,7 +1044,7 @@ impl<'ast> AstNode<'ast> for ast::StmtAssign<'ast> {
             range: _,
         } = self;
 
-        for expr in targets.iter() {
+        for expr in targets {
             visitor.visit_expr(expr);
         }
 
@@ -1303,7 +1303,7 @@ impl<'ast> AstNode<'ast> for ast::StmtIf<'ast> {
 
         visitor.visit_expr(test);
         visitor.visit_body(body);
-        for clause in elif_else_clauses.iter() {
+        for clause in elif_else_clauses {
             visitor.visit_elif_else_clause(clause);
         }
     }
@@ -2342,7 +2342,7 @@ impl<'ast> AstNode<'ast> for ast::ExprDict<'ast> {
     {
         let ast::ExprDict { items, range: _ } = self;
 
-        for ast::DictItem { key, value } in items.iter() {
+        for ast::DictItem { key, value } in items {
             if let Some(key) = key {
                 visitor.visit_expr(key);
             }
@@ -2390,7 +2390,7 @@ impl<'ast> AstNode<'ast> for ast::ExprSet<'ast> {
     {
         let ast::ExprSet { elts, range: _ } = self;
 
-        for expr in elts.iter() {
+        for expr in elts {
             visitor.visit_expr(expr);
         }
     }
@@ -2440,7 +2440,7 @@ impl<'ast> AstNode<'ast> for ast::ExprListComp<'ast> {
         } = self;
 
         visitor.visit_expr(elt);
-        for comprehension in generators.iter() {
+        for comprehension in generators {
             visitor.visit_comprehension(comprehension);
         }
     }
@@ -2490,7 +2490,7 @@ impl<'ast> AstNode<'ast> for ast::ExprSetComp<'ast> {
         } = self;
 
         visitor.visit_expr(elt);
-        for comprehension in generators.iter() {
+        for comprehension in generators {
             visitor.visit_comprehension(comprehension);
         }
     }
@@ -2543,7 +2543,7 @@ impl<'ast> AstNode<'ast> for ast::ExprDictComp<'ast> {
         visitor.visit_expr(key);
         visitor.visit_expr(value);
 
-        for comprehension in generators.iter() {
+        for comprehension in generators {
             visitor.visit_comprehension(comprehension);
         }
     }
@@ -2593,7 +2593,7 @@ impl<'ast> AstNode<'ast> for ast::ExprGenerator<'ast> {
             parenthesized: _,
         } = self;
         visitor.visit_expr(elt);
-        for comprehension in generators.iter() {
+        for comprehension in generators {
             visitor.visit_comprehension(comprehension);
         }
     }
@@ -3495,7 +3495,7 @@ impl<'ast> AstNode<'ast> for ast::ExprList<'ast> {
             range: _,
         } = self;
 
-        for expr in elts.iter() {
+        for expr in elts {
             visitor.visit_expr(expr);
         }
     }
@@ -3545,7 +3545,7 @@ impl<'ast> AstNode<'ast> for ast::ExprTuple<'ast> {
             parenthesized: _,
         } = self;
 
-        for expr in elts.iter() {
+        for expr in elts {
             visitor.visit_expr(expr);
         }
     }
@@ -3824,7 +3824,7 @@ impl<'ast> AstNode<'ast> for ast::PatternMatchSequence<'ast> {
         V: SourceOrderVisitor<'a, 'ast> + ?Sized,
     {
         let ast::PatternMatchSequence { patterns, range: _ } = self;
-        for pattern in patterns.iter() {
+        for pattern in patterns {
             visitor.visit_pattern(pattern);
         }
     }
@@ -4055,7 +4055,7 @@ impl<'ast> AstNode<'ast> for ast::PatternMatchOr<'ast> {
         V: SourceOrderVisitor<'a, 'ast> + ?Sized,
     {
         let ast::PatternMatchOr { patterns, range: _ } = self;
-        for pattern in patterns.iter() {
+        for pattern in patterns {
             visitor.visit_pattern(pattern);
         }
     }
@@ -4104,11 +4104,11 @@ impl<'ast> AstNode<'ast> for PatternArguments<'ast> {
             keywords,
         } = self;
 
-        for pattern in patterns.iter() {
+        for pattern in patterns {
             visitor.visit_pattern(pattern);
         }
 
-        for keyword in keywords.iter() {
+        for keyword in keywords {
             visitor.visit_pattern_keyword(keyword);
         }
     }
@@ -4209,7 +4209,7 @@ impl<'ast> AstNode<'ast> for Comprehension<'ast> {
         visitor.visit_expr(target);
         visitor.visit_expr(iter);
 
-        for expr in ifs.iter() {
+        for expr in ifs {
             visitor.visit_expr(expr);
         }
     }
@@ -4692,7 +4692,7 @@ impl<'ast> AstNode<'ast> for ast::TypeParams<'ast> {
             type_params,
         } = self;
 
-        for type_param in type_params.iter() {
+        for type_param in type_params {
             visitor.visit_type_param(type_param);
         }
     }

@@ -127,7 +127,7 @@ pub fn walk_stmt<V: Transformer + ?Sized>(visitor: &V, stmt: &mut Stmt) {
                 visitor.visit_decorator(decorator);
             }
             if let Some(type_params) = type_params {
-                visitor.visit_type_params(*type_params);
+                visitor.visit_type_params(type_params);
             }
             visitor.visit_parameters(parameters);
             for expr in returns {
@@ -146,10 +146,10 @@ pub fn walk_stmt<V: Transformer + ?Sized>(visitor: &V, stmt: &mut Stmt) {
                 visitor.visit_decorator(decorator);
             }
             if let Some(type_params) = type_params {
-                visitor.visit_type_params(*type_params);
+                visitor.visit_type_params(type_params);
             }
             if let Some(arguments) = arguments {
-                visitor.visit_arguments(*arguments);
+                visitor.visit_arguments(arguments);
             }
             visitor.visit_body(body);
         }
@@ -579,46 +579,46 @@ pub fn walk_arguments<V: Transformer + ?Sized>(visitor: &V, arguments: &mut Argu
     // Note that the there might be keywords before the last arg, e.g. in
     // f(*args, a=2, *args2, **kwargs)`, but we follow Python in evaluating first `args` and then
     // `keywords`. See also [Arguments::arguments_source_order`].
-    for arg in arguments.args.iter_mut() {
+    for arg in &mut arguments.args {
         visitor.visit_expr(arg);
     }
-    for keyword in arguments.keywords.iter_mut() {
+    for keyword in &mut arguments.keywords {
         visitor.visit_keyword(keyword);
     }
 }
 
 pub fn walk_parameters<V: Transformer + ?Sized>(visitor: &V, parameters: &mut Parameters) {
     // Defaults are evaluated before annotations.
-    for arg in parameters.posonlyargs.iter_mut() {
+    for arg in &mut parameters.posonlyargs {
         if let Some(default) = &mut arg.default {
             visitor.visit_expr(default);
         }
     }
-    for arg in parameters.args.iter_mut() {
+    for arg in &mut parameters.args {
         if let Some(default) = &mut arg.default {
             visitor.visit_expr(default);
         }
     }
-    for arg in parameters.kwonlyargs.iter_mut() {
+    for arg in &mut parameters.kwonlyargs {
         if let Some(default) = &mut arg.default {
             visitor.visit_expr(default);
         }
     }
 
-    for arg in parameters.posonlyargs.iter_mut() {
+    for arg in &mut parameters.posonlyargs {
         visitor.visit_parameter(&mut arg.parameter);
     }
-    for arg in parameters.args.iter_mut() {
+    for arg in &mut parameters.args {
         visitor.visit_parameter(&mut arg.parameter);
     }
     if let Some(arg) = &mut parameters.vararg {
         visitor.visit_parameter(arg);
     }
-    for arg in parameters.kwonlyargs.iter_mut() {
+    for arg in &mut parameters.kwonlyargs {
         visitor.visit_parameter(&mut arg.parameter);
     }
     if let Some(arg) = &mut parameters.kwarg {
-        visitor.visit_parameter(*arg);
+        visitor.visit_parameter(arg);
     }
 }
 
@@ -640,7 +640,7 @@ pub fn walk_with_item<V: Transformer + ?Sized>(visitor: &V, with_item: &mut With
 }
 
 pub fn walk_type_params<V: Transformer + ?Sized>(visitor: &V, type_params: &mut TypeParams) {
-    for type_param in type_params.type_params.iter_mut() {
+    for type_param in &mut type_params.type_params {
         visitor.visit_type_param(type_param);
     }
 }
@@ -730,10 +730,10 @@ pub fn walk_pattern_arguments<V: Transformer + ?Sized>(
     visitor: &V,
     pattern_arguments: &mut PatternArguments,
 ) {
-    for pattern in pattern_arguments.patterns.iter_mut() {
+    for pattern in &mut pattern_arguments.patterns {
         visitor.visit_pattern(pattern);
     }
-    for keyword in pattern_arguments.keywords.iter_mut() {
+    for keyword in &mut pattern_arguments.keywords {
         visitor.visit_pattern_keyword(keyword);
     }
 }
@@ -763,7 +763,7 @@ pub fn walk_f_string_element<V: Transformer + ?Sized>(
     {
         visitor.visit_expr(expression);
         if let Some(format_spec) = format_spec {
-            for spec_element in format_spec.elements.iter_mut() {
+            for spec_element in &mut format_spec.elements {
                 visitor.visit_f_string_element(spec_element);
             }
         }

@@ -219,7 +219,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                             ParseErrorType::OtherError("Invalid mapping pattern key".to_string()),
                             &pattern,
                         );
-                        recovery::pattern_to_expr(&pattern, &parser.allocator)
+                        recovery::pattern_to_expr(&pattern, parser.allocator)
                     }
                 };
                 keys.push(key);
@@ -546,24 +546,24 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         };
 
         let lhs_value = if let Pattern::MatchValue(lhs) = lhs {
-            if !is_real_number(&lhs.value) {
+            if !is_real_number(lhs.value) {
                 self.add_error(ParseErrorType::ExpectedRealNumber, &lhs);
             }
             lhs.value
         } else {
             self.add_error(ParseErrorType::ExpectedRealNumber, &lhs);
-            self.alloc(recovery::pattern_to_expr(&lhs, &self.allocator))
+            self.alloc(recovery::pattern_to_expr(&lhs, self.allocator))
         };
 
         let rhs_pattern = self.parse_match_pattern_lhs(AllowStarPattern::No);
         let rhs_value = if let Pattern::MatchValue(rhs) = rhs_pattern {
-            if !is_complex_number(&rhs.value) {
+            if !is_complex_number(rhs.value) {
                 self.add_error(ParseErrorType::ExpectedImaginaryNumber, &rhs);
             }
             rhs.value
         } else {
             self.add_error(ParseErrorType::ExpectedImaginaryNumber, &rhs_pattern);
-            self.alloc(recovery::pattern_to_expr(&rhs_pattern, &self.allocator))
+            self.alloc(recovery::pattern_to_expr(&rhs_pattern, self.allocator))
         };
 
         let range = self.node_range(start);
@@ -638,7 +638,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     ParseErrorType::OtherError("Invalid value for a class pattern".to_string()),
                     &pattern,
                 );
-                self.alloc(recovery::pattern_to_expr(&pattern, &self.allocator))
+                self.alloc(recovery::pattern_to_expr(&pattern, self.allocator))
             }
         };
 
