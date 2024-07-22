@@ -291,9 +291,9 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     let right = self.parse_binary_expression_or_higher(new_precedence, context);
 
                     Expr::BinOp(ast::ExprBinOp {
-                        left: self.alloc_box(left.expr),
+                        left: self.alloc(left.expr),
                         op: bin_op,
-                        right: self.alloc_box(right.expr),
+                        right: self.alloc(right.expr),
                         range: self.node_range(start),
                     })
                 }
@@ -642,7 +642,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let arguments = self.parse_arguments();
 
         ast::ExprCall {
-            func: self.alloc_box(func),
+            func: self.alloc(func),
             arguments,
             range: self.node_range(start),
         }
@@ -758,8 +758,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         let arguments = ast::Arguments {
             range: self.node_range(start),
-            args: args.into_bump_slice_mut(),
-            keywords: keywords.into_bump_slice_mut(),
+            args,
+            keywords,
         };
 
         self.validate_arguments(&arguments);
@@ -794,8 +794,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             self.add_error(ParseErrorType::EmptySlice, slice_range);
 
             return ast::ExprSubscript {
-                value: self.alloc_box(value),
-                slice: self.alloc_box(Expr::Name(ast::ExprName {
+                value: self.alloc(value),
+                slice: self.alloc(Expr::Name(ast::ExprName {
                     range: slice_range,
                     id: "",
                     ctx: ExprContext::Invalid,
@@ -810,7 +810,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         // If there are more than one element in the slice, we need to create a tuple
         // expression to represent it.
         if self.eat(TokenKind::Comma) {
-            let mut slices = vec![slice];
+            let mut slices = ruff_allocator::vec![in &self.allocator; slice];
 
             self.parse_comma_separated_list(RecoveryContextKind::Slices, |parser| {
                 slices.push(parser.parse_slice());
@@ -827,7 +827,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             // using a tuple expression with a single element. This is the second case
             // in the `slices` rule in the Python grammar.
             slice = Expr::Tuple(ast::ExprTuple {
-                elts: vec![slice],
+                elts: ruff_allocator::vec![in &self.allocator],
                 ctx: ExprContext::Load,
                 range: self.node_range(slice_start),
                 parenthesized: false,
@@ -837,8 +837,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.expect(TokenKind::Rsqb);
 
         ast::ExprSubscript {
-            value: self.alloc_box(value),
-            slice: self.alloc_box(slice),
+            value: self.alloc(value),
+            slice: self.alloc(slice),
             ctx: ExprContext::Load,
             range: self.node_range(start),
         }
@@ -882,12 +882,12 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         self.expect(TokenKind::Colon);
 
-        let lower = lower.map(|lower| self.alloc_box(lower));
+        let lower = lower.map(|lower| self.alloc(lower));
         let upper = if self.at_ts(UPPER_END_SET) {
             None
         } else {
             let expression = self.parse_conditional_expression_or_higher().expr;
-            Some(self.alloc_box(expression))
+            Some(self.alloc(expression))
         };
 
         let step = if self.eat(TokenKind::Colon) {
@@ -895,7 +895,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 None
             } else {
                 let expression = self.parse_conditional_expression_or_higher().expr;
-                Some(self.alloc_box(expression))
+                Some(self.alloc(expression))
             }
         } else {
             None
@@ -931,7 +931,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         ast::ExprUnaryOp {
             op,
-            operand: self.alloc_box(operand.expr),
+            operand: self.alloc(operand.expr),
             range: self.node_range(start),
         }
     }
@@ -953,7 +953,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let attr = self.parse_identifier();
 
         ast::ExprAttribute {
-            value: self.alloc_box(value),
+            value: self.alloc(value),
             attr,
             ctx: ExprContext::Load,
             range: self.node_range(start),
@@ -979,7 +979,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     ) -> ast::ExprBoolOp<'ast> {
         self.bump(TokenKind::from(op));
 
-        let mut values = vec![lhs];
+        let mut values = ruff_allocator::Vec::new_in(self.allocator);
+        values.push(lhs);
         let mut progress = ParserProgress::default();
 
         // Keep adding the expression to `values` until we see a different
@@ -1076,9 +1077,9 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
 
         ast::ExprCompare {
-            left: self.alloc_box(lhs),
-            ops: operators.into_bump_slice_mut(),
-            comparators: comparators.into_bump_slice_mut(),
+            left: self.alloc(lhs),
+            ops: operators,
+            comparators,
             range: self.node_range(start),
         }
     }
@@ -1182,7 +1183,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 // otherwise, we'll try either string or f-string. This is to retain
                 // as much information as possible.
                 Ordering::Equal => {
-                    let mut values = Vec::with_capacity(strings.len());
+                    let mut values =
+                        ruff_allocator::Vec::with_capacity_in(strings.len(), self.allocator);
                     for string in strings {
                         values.push(match string {
                             StringType::Bytes(value) => value,
@@ -1221,7 +1223,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         // 2 + 2
 
         if !has_fstring {
-            let mut values = Vec::with_capacity(strings.len());
+            let mut values = ruff_allocator::Vec::with_capacity_in(strings.len(), self.allocator);
             for string in strings {
                 values.push(match string {
                     StringType::Str(value) => value,
@@ -1234,7 +1236,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             });
         }
 
-        let mut parts = Vec::with_capacity(strings.len());
+        let mut parts = ruff_allocator::Vec::with_capacity_in(strings.len(), self.allocator);
         for string in strings {
             match string {
                 StringType::FString(fstring) => parts.push(ast::FStringPart::FString(fstring)),
@@ -1334,7 +1336,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         flags: ast::AnyStringFlags,
         kind: FStringElementsKind,
     ) -> FStringElements<'ast> {
-        let mut elements = vec![];
+        let mut elements = ruff_allocator::vec![in &self.allocator;];
 
         self.parse_list(RecoveryContextKind::FStringElements(kind), |parser| {
             let element = match parser.current_token_kind() {
@@ -1427,8 +1429,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             let leading_range = TextRange::new(start + "{".text_len(), value.start());
             let trailing_range = TextRange::new(value.end(), self.current_token_range().start());
             Some(ast::DebugText {
-                leading: self.src_text(leading_range).to_string(),
-                trailing: self.src_text(trailing_range).to_string(),
+                leading: self.alloc_str(self.src_text(leading_range)),
+                trailing: self.alloc_str(self.src_text(trailing_range)),
             })
         } else {
             None
@@ -1473,7 +1475,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let format_spec = if self.eat(TokenKind::Colon) {
             let spec_start = self.node_start();
             let elements = self.parse_fstring_elements(flags, FStringElementsKind::FormatSpec);
-            Some(self.alloc_box(ast::FStringFormatSpec {
+            Some(self.alloc(ast::FStringFormatSpec {
                 range: self.node_range(spec_start),
                 elements,
             }))
@@ -1506,7 +1508,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
 
         ast::FStringExpressionElement {
-            expression: self.alloc_box(value.expr),
+            expression: self.alloc(value.expr),
             debug_text,
             conversion,
             format_spec,
@@ -1537,7 +1539,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         // Return an empty `ListExpr` when finding a `]` right after the `[`
         if self.eat(TokenKind::Rsqb) {
             return Expr::List(ast::ExprList {
-                elts: vec![],
+                elts: ruff_allocator::vec![in &self.allocator],
                 ctx: ExprContext::Load,
                 range: self.node_range(start),
             });
@@ -1589,7 +1591,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         // Return an empty `DictExpr` when finding a `}` right after the `{`
         if self.eat(TokenKind::Rbrace) {
             return Expr::Dict(ast::ExprDict {
-                items: vec![],
+                items: ruff_allocator::vec![in &self.allocator],
                 range: self.node_range(start),
             });
         }
@@ -1678,7 +1680,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         // Return an empty `TupleExpr` when finding a `)` right after the `(`
         if self.eat(TokenKind::Rpar) {
             return Expr::Tuple(ast::ExprTuple {
-                elts: vec![],
+                elts: ruff_allocator::vec![in &self.allocator],
                 ctx: ExprContext::Load,
                 range: self.node_range(start),
                 parenthesized: true,
@@ -1755,7 +1757,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             self.expect(TokenKind::Comma);
         }
 
-        let mut elts = vec![first_element];
+        let mut elts = ruff_allocator::vec![in &self.allocator; first_element];
 
         self.parse_comma_separated_list(RecoveryContextKind::TupleElements(parenthesized), |p| {
             elts.push(parse_func(p).expr);
@@ -1785,7 +1787,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             self.expect(TokenKind::Comma);
         }
 
-        let mut elts = vec![first_element];
+        let mut elts = ruff_allocator::vec![in &self.allocator; first_element];
 
         self.parse_comma_separated_list(RecoveryContextKind::ListElements, |parser| {
             elts.push(
@@ -1816,7 +1818,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             self.expect(TokenKind::Comma);
         }
 
-        let mut elts = vec![first_element];
+        let mut elts = ruff_allocator::vec![in &self.allocator; first_element];
 
         self.parse_comma_separated_list(RecoveryContextKind::SetElements, |parser| {
             elts.push(
@@ -1847,7 +1849,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             self.expect(TokenKind::Comma);
         }
 
-        let mut items = vec![ast::DictItem { key, value }];
+        let mut items = ruff_allocator::vec![in &self.allocator; ast::DictItem { key, value }];
 
         self.parse_comma_separated_list(RecoveryContextKind::DictElements, |parser| {
             if parser.eat(TokenKind::DoubleStar) {
@@ -1882,10 +1884,10 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     /// followed by `if` clauses.
     ///
     /// See: <https://docs.python.org/3/reference/expressions.html#grammar-token-python-grammar-comp_for>
-    fn parse_generators(&mut self) -> Vec<ast::Comprehension<'ast>> {
+    fn parse_generators(&mut self) -> ruff_allocator::Vec<'ast, ast::Comprehension<'ast>> {
         const GENERATOR_SET: TokenSet = TokenSet::new([TokenKind::For, TokenKind::Async]);
 
-        let mut generators = vec![];
+        let mut generators = ruff_allocator::vec![in &self.allocator;];
         let mut progress = ParserProgress::default();
 
         while self.at_ts(GENERATOR_SET) {
@@ -1926,7 +1928,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.expect(TokenKind::In);
         let iter = self.parse_simple_expression(ExpressionContext::default());
 
-        let mut ifs = vec![];
+        let mut ifs = ruff_allocator::vec![in &self.allocator;];
         let mut progress = ParserProgress::default();
 
         while self.eat(TokenKind::If) {
@@ -1965,7 +1967,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
 
         ast::ExprGenerator {
-            elt: self.alloc_box(element),
+            elt: self.alloc(element),
             generators,
             range: self.node_range(start),
             parenthesized: parenthesized.is_yes(),
@@ -1985,7 +1987,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.expect(TokenKind::Rsqb);
 
         ast::ExprListComp {
-            elt: self.alloc_box(element),
+            elt: self.alloc(element),
             generators,
             range: self.node_range(start),
         }
@@ -2005,8 +2007,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.expect(TokenKind::Rbrace);
 
         ast::ExprDictComp {
-            key: self.alloc_box(key),
-            value: self.alloc_box(value),
+            key: self.alloc(key),
+            value: self.alloc(value),
             generators,
             range: self.node_range(start),
         }
@@ -2025,7 +2027,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.expect(TokenKind::Rbrace);
 
         ast::ExprSetComp {
-            elt: self.alloc_box(element),
+            elt: self.alloc(element),
             generators,
             range: self.node_range(start),
         }
@@ -2061,7 +2063,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         };
 
         ast::ExprStarred {
-            value: self.alloc_box(parsed_expr.expr),
+            value: self.alloc(parsed_expr.expr),
             ctx: ExprContext::Load,
             range: self.node_range(start),
         }
@@ -2084,7 +2086,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         );
 
         ast::ExprAwait {
-            value: self.alloc_box(parsed_expr.expr),
+            value: self.alloc(parsed_expr.expr),
             range: self.node_range(start),
         }
     }
@@ -2108,7 +2110,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             let expression = self
                 .parse_expression_list(ExpressionContext::starred_bitwise_or())
                 .expr;
-            self.alloc_box(expression)
+            self.alloc(expression)
         });
 
         Expr::Yield(ast::ExprYield {
@@ -2151,7 +2153,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
 
         Expr::YieldFrom(ast::ExprYieldFrom {
-            value: self.alloc_box(expr),
+            value: self.alloc(expr),
             range: self.node_range(start),
         })
     }
@@ -2178,8 +2180,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let value = self.parse_conditional_expression_or_higher();
 
         ast::ExprNamed {
-            target: self.alloc_box(target),
-            value: self.alloc_box(value.expr),
+            target: self.alloc(target),
+            value: self.alloc(value.expr),
             range: self.node_range(start),
         }
     }
@@ -2201,7 +2203,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             None
         } else {
             let parameters = self.parse_parameters(FunctionKind::Lambda);
-            Some(self.alloc_box(parameters))
+            Some(self.alloc(parameters))
         };
 
         self.expect(TokenKind::Colon);
@@ -2226,7 +2228,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let body = self.parse_conditional_expression_or_higher();
 
         ast::ExprLambda {
-            body: self.alloc_box(body.expr),
+            body: self.alloc(body.expr),
             parameters,
             range: self.node_range(start),
         }
@@ -2253,9 +2255,9 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let orelse = self.parse_conditional_expression_or_higher();
 
         ast::ExprIf {
-            body: self.alloc_box(body),
-            test: self.alloc_box(test.expr),
-            orelse: self.alloc_box(orelse.expr),
+            body: self.alloc(body),
+            test: self.alloc(test.expr),
+            orelse: self.alloc(orelse.expr),
             range: self.node_range(start),
         }
     }

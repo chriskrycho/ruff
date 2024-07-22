@@ -123,11 +123,11 @@ pub fn walk_stmt<V: Transformer + ?Sized>(visitor: &V, stmt: &mut Stmt) {
             type_params,
             ..
         }) => {
-            for decorator in decorator_list {
+            for decorator in decorator_list.iter_mut() {
                 visitor.visit_decorator(decorator);
             }
             if let Some(type_params) = type_params {
-                visitor.visit_type_params(type_params);
+                visitor.visit_type_params(*type_params);
             }
             visitor.visit_parameters(parameters);
             for expr in returns {
@@ -142,14 +142,14 @@ pub fn walk_stmt<V: Transformer + ?Sized>(visitor: &V, stmt: &mut Stmt) {
             type_params,
             ..
         }) => {
-            for decorator in decorator_list {
+            for decorator in decorator_list.iter_mut() {
                 visitor.visit_decorator(decorator);
             }
             if let Some(type_params) = type_params {
-                visitor.visit_type_params(type_params);
+                visitor.visit_type_params(*type_params);
             }
             if let Some(arguments) = arguments {
-                visitor.visit_arguments(arguments);
+                visitor.visit_arguments(*arguments);
             }
             visitor.visit_body(body);
         }
@@ -159,7 +159,7 @@ pub fn walk_stmt<V: Transformer + ?Sized>(visitor: &V, stmt: &mut Stmt) {
             }
         }
         Stmt::Delete(ast::StmtDelete { targets, range: _ }) => {
-            for expr in targets {
+            for expr in targets.iter_mut() {
                 visitor.visit_expr(expr);
             }
         }
@@ -177,7 +177,7 @@ pub fn walk_stmt<V: Transformer + ?Sized>(visitor: &V, stmt: &mut Stmt) {
         }
         Stmt::Assign(ast::StmtAssign { targets, value, .. }) => {
             visitor.visit_expr(value);
-            for expr in targets {
+            for expr in targets.iter_mut() {
                 visitor.visit_expr(expr);
             }
         }
@@ -233,7 +233,7 @@ pub fn walk_stmt<V: Transformer + ?Sized>(visitor: &V, stmt: &mut Stmt) {
         }) => {
             visitor.visit_expr(test);
             visitor.visit_body(body);
-            for clause in elif_else_clauses {
+            for clause in elif_else_clauses.iter_mut() {
                 if let Some(test) = &mut clause.test {
                     visitor.visit_expr(test);
                 }
@@ -326,7 +326,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             range: _,
         }) => {
             visitor.visit_bool_op(op);
-            for expr in values {
+            for expr in values.iter_mut() {
                 visitor.visit_expr(expr);
             }
         }
@@ -377,7 +377,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             visitor.visit_expr(orelse);
         }
         Expr::Dict(ast::ExprDict { items, range: _ }) => {
-            for ast::DictItem { key, value } in items {
+            for ast::DictItem { key, value } in items.iter_mut() {
                 if let Some(key) = key {
                     visitor.visit_expr(key);
                 }
@@ -385,7 +385,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             }
         }
         Expr::Set(ast::ExprSet { elts, range: _ }) => {
-            for expr in elts {
+            for expr in elts.iter_mut() {
                 visitor.visit_expr(expr);
             }
         }
@@ -394,7 +394,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             generators,
             range: _,
         }) => {
-            for comprehension in generators {
+            for comprehension in generators.iter_mut() {
                 visitor.visit_comprehension(comprehension);
             }
             visitor.visit_expr(elt);
@@ -404,7 +404,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             generators,
             range: _,
         }) => {
-            for comprehension in generators {
+            for comprehension in generators.iter_mut() {
                 visitor.visit_comprehension(comprehension);
             }
             visitor.visit_expr(elt);
@@ -415,7 +415,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             generators,
             range: _,
         }) => {
-            for comprehension in generators {
+            for comprehension in generators.iter_mut() {
                 visitor.visit_comprehension(comprehension);
             }
             visitor.visit_expr(key);
@@ -427,7 +427,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             range: _,
             parenthesized: _,
         }) => {
-            for comprehension in generators {
+            for comprehension in generators.iter_mut() {
                 visitor.visit_comprehension(comprehension);
             }
             visitor.visit_expr(elt);
@@ -517,7 +517,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             ctx,
             range: _,
         }) => {
-            for expr in elts {
+            for expr in elts.iter_mut() {
                 visitor.visit_expr(expr);
             }
             visitor.visit_expr_context(ctx);
@@ -528,7 +528,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             range: _,
             parenthesized: _,
         }) => {
-            for expr in elts {
+            for expr in elts.iter_mut() {
                 visitor.visit_expr(expr);
             }
             visitor.visit_expr_context(ctx);
@@ -556,7 +556,7 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
 pub fn walk_comprehension<V: Transformer + ?Sized>(visitor: &V, comprehension: &mut Comprehension) {
     visitor.visit_expr(&mut comprehension.iter);
     visitor.visit_expr(&mut comprehension.target);
-    for expr in &mut comprehension.ifs {
+    for expr in &mut *comprehension.ifs {
         visitor.visit_expr(expr);
     }
 }
@@ -589,36 +589,36 @@ pub fn walk_arguments<V: Transformer + ?Sized>(visitor: &V, arguments: &mut Argu
 
 pub fn walk_parameters<V: Transformer + ?Sized>(visitor: &V, parameters: &mut Parameters) {
     // Defaults are evaluated before annotations.
-    for arg in &mut parameters.posonlyargs {
+    for arg in parameters.posonlyargs.iter_mut() {
         if let Some(default) = &mut arg.default {
             visitor.visit_expr(default);
         }
     }
-    for arg in &mut parameters.args {
+    for arg in parameters.args.iter_mut() {
         if let Some(default) = &mut arg.default {
             visitor.visit_expr(default);
         }
     }
-    for arg in &mut parameters.kwonlyargs {
+    for arg in parameters.kwonlyargs.iter_mut() {
         if let Some(default) = &mut arg.default {
             visitor.visit_expr(default);
         }
     }
 
-    for arg in &mut parameters.posonlyargs {
+    for arg in parameters.posonlyargs.iter_mut() {
         visitor.visit_parameter(&mut arg.parameter);
     }
-    for arg in &mut parameters.args {
+    for arg in parameters.args.iter_mut() {
         visitor.visit_parameter(&mut arg.parameter);
     }
     if let Some(arg) = &mut parameters.vararg {
         visitor.visit_parameter(arg);
     }
-    for arg in &mut parameters.kwonlyargs {
+    for arg in parameters.kwonlyargs.iter_mut() {
         visitor.visit_parameter(&mut arg.parameter);
     }
     if let Some(arg) = &mut parameters.kwarg {
-        visitor.visit_parameter(arg);
+        visitor.visit_parameter(*arg);
     }
 }
 
@@ -640,7 +640,7 @@ pub fn walk_with_item<V: Transformer + ?Sized>(visitor: &V, with_item: &mut With
 }
 
 pub fn walk_type_params<V: Transformer + ?Sized>(visitor: &V, type_params: &mut TypeParams) {
-    for type_param in &mut type_params.type_params {
+    for type_param in type_params.type_params.iter_mut() {
         visitor.visit_type_param(type_param);
     }
 }
@@ -696,15 +696,15 @@ pub fn walk_pattern<V: Transformer + ?Sized>(visitor: &V, pattern: &mut Pattern)
         }
         Pattern::MatchSingleton(_) => {}
         Pattern::MatchSequence(ast::PatternMatchSequence { patterns, .. }) => {
-            for pattern in patterns {
+            for pattern in patterns.iter_mut() {
                 visitor.visit_pattern(pattern);
             }
         }
         Pattern::MatchMapping(ast::PatternMatchMapping { keys, patterns, .. }) => {
-            for expr in keys {
+            for expr in keys.iter_mut() {
                 visitor.visit_expr(expr);
             }
-            for pattern in patterns {
+            for pattern in patterns.iter_mut() {
                 visitor.visit_pattern(pattern);
             }
         }
@@ -719,7 +719,7 @@ pub fn walk_pattern<V: Transformer + ?Sized>(visitor: &V, pattern: &mut Pattern)
             }
         }
         Pattern::MatchOr(ast::PatternMatchOr { patterns, .. }) => {
-            for pattern in patterns {
+            for pattern in patterns.iter_mut() {
                 visitor.visit_pattern(pattern);
             }
         }
@@ -730,10 +730,10 @@ pub fn walk_pattern_arguments<V: Transformer + ?Sized>(
     visitor: &V,
     pattern_arguments: &mut PatternArguments,
 ) {
-    for pattern in &mut pattern_arguments.patterns {
+    for pattern in pattern_arguments.patterns.iter_mut() {
         visitor.visit_pattern(pattern);
     }
-    for keyword in &mut pattern_arguments.keywords {
+    for keyword in pattern_arguments.keywords.iter_mut() {
         visitor.visit_pattern_keyword(keyword);
     }
 }
@@ -763,7 +763,7 @@ pub fn walk_f_string_element<V: Transformer + ?Sized>(
     {
         visitor.visit_expr(expression);
         if let Some(format_spec) = format_spec {
-            for spec_element in &mut format_spec.elements {
+            for spec_element in format_spec.elements.iter_mut() {
                 visitor.visit_f_string_element(spec_element);
             }
         }

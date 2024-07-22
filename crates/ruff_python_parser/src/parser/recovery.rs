@@ -1,4 +1,4 @@
-use ruff_allocator::Allocator;
+use ruff_allocator::{Allocator, CloneIn, CollectIn};
 use ruff_python_ast::{self as ast, Expr, ExprContext, Pattern};
 use ruff_text_size::{Ranged, TextLen, TextRange};
 
@@ -26,30 +26,35 @@ use ruff_text_size::{Ranged, TextLen, TextRange};
 /// with both the pattern and name present. This is because it cannot be converted to an expression
 /// without dropping one of them as there's no way to represent `x as y` as a valid expression.
 pub(super) fn pattern_to_expr<'ast>(
-    pattern: Pattern<'ast>,
+    pattern: &Pattern<'ast>,
     allocator: &'ast Allocator,
 ) -> Expr<'ast> {
     match pattern {
         Pattern::MatchSingleton(ast::PatternMatchSingleton { range, value }) => match value {
-            ast::Singleton::True => {
-                Expr::BooleanLiteral(ast::ExprBooleanLiteral { value: true, range })
-            }
+            ast::Singleton::True => Expr::BooleanLiteral(ast::ExprBooleanLiteral {
+                value: true,
+                range: *range,
+            }),
             ast::Singleton::False => Expr::BooleanLiteral(ast::ExprBooleanLiteral {
                 value: false,
-                range,
+                range: *range,
             }),
-            ast::Singleton::None => Expr::NoneLiteral(ast::ExprNoneLiteral { range }),
+            ast::Singleton::None => Expr::NoneLiteral(ast::ExprNoneLiteral { range: *range }),
         },
-        Pattern::MatchValue(ast::PatternMatchValue { value, .. }) => value.into_inner(),
+        Pattern::MatchValue(ast::PatternMatchValue { value, .. }) => (*value).clone_in(allocator),
         // We don't know which kind of sequence this is: `case [1, 2]:` or `case (1, 2):`.
         Pattern::MatchSequence(ast::PatternMatchSequence { range, patterns }) => {
-            Expr::List(ast::ExprList {
-                elts: patterns
+            let mut elements = ruff_allocator::Vec::with_capacity_in(patterns.len(), allocator);
+            elements.extend(
+                (**patterns)
                     .into_iter()
-                    .map(|pattern| pattern_to_expr(pattern, allocator))
-                    .collect(),
+                    .map(|pattern| pattern_to_expr(pattern, allocator)),
+            );
+
+            Expr::List(ast::ExprList {
+                elts: elements,
                 ctx: ExprContext::Store,
-                range,
+                range: *range,
             })
         }
         Pattern::MatchMapping(ast::PatternMatchMapping {
@@ -58,14 +63,17 @@ pub(super) fn pattern_to_expr<'ast>(
             patterns,
             rest,
         }) => {
-            let mut items: Vec<ast::DictItem> = keys
-                .into_iter()
-                .zip(patterns)
-                .map(|(key, pattern)| ast::DictItem {
-                    key: Some(key),
-                    value: pattern_to_expr(pattern, allocator),
-                })
-                .collect();
+            let mut items =
+                ruff_allocator::Vec::with_capacity_in(keys.len() + patterns.len(), allocator);
+            items.extend(
+                (**keys)
+                    .into_iter()
+                    .zip(patterns.iter())
+                    .map(|(key, pattern)| ast::DictItem {
+                        key: Some(key.clone_in(allocator)),
+                        value: pattern_to_expr(pattern, allocator),
+                    }),
+            );
             if let Some(rest) = rest {
                 let value = Expr::Name(ast::ExprName {
                     range: rest.range,
@@ -74,57 +82,55 @@ pub(super) fn pattern_to_expr<'ast>(
                 });
                 items.push(ast::DictItem { key: None, value });
             }
-            Expr::Dict(ast::ExprDict { range, items })
+            Expr::Dict(ast::ExprDict {
+                range: *range,
+                items,
+            })
         }
         Pattern::MatchClass(ast::PatternMatchClass {
             range,
             cls,
             arguments,
         }) => Expr::Call(ast::ExprCall {
-            range,
-            func: cls,
+            range: *range,
+            func: allocator.alloc((*cls).clone_in(allocator)),
             arguments: ast::Arguments {
                 range: arguments.range,
-                args: allocator.alloc_slice_fill_iter(
-                    arguments
-                        .patterns
-                        .into_iter()
-                        .map(|pattern| pattern_to_expr(pattern, allocator)),
-                ),
-                keywords: allocator.alloc_slice_fill_iter(arguments.keywords.into_iter().map(
-                    |keyword_pattern| ast::Keyword {
+                args: arguments
+                    .patterns
+                    .iter()
+                    .map(|pattern| pattern_to_expr(pattern, allocator))
+                    .collect_in(allocator),
+                keywords: arguments
+                    .keywords
+                    .iter()
+                    .map(|keyword_pattern| ast::Keyword {
                         range: keyword_pattern.range,
-                        arg: Some(keyword_pattern.attr),
-                        value: pattern_to_expr(keyword_pattern.pattern, allocator),
-                    },
-                )),
+                        arg: Some(keyword_pattern.attr.clone_in(allocator)),
+                        value: pattern_to_expr(&keyword_pattern.pattern, allocator),
+                    })
+                    .collect_in(allocator),
             },
         }),
         Pattern::MatchStar(ast::PatternMatchStar { range, name }) => {
             if let Some(name) = name {
                 Expr::Starred(ast::ExprStarred {
-                    range,
-                    value: ruff_allocator::Box::new_in(
-                        Expr::Name(ast::ExprName {
-                            range: name.range,
-                            id: name.id,
-                            ctx: ExprContext::Store,
-                        }),
-                        allocator,
-                    ),
+                    range: *range,
+                    value: allocator.alloc(Expr::Name(ast::ExprName {
+                        range: name.range,
+                        id: name.id,
+                        ctx: ExprContext::Store,
+                    })),
                     ctx: ExprContext::Store,
                 })
             } else {
                 Expr::Starred(ast::ExprStarred {
-                    range,
-                    value: ruff_allocator::Box::new_in(
-                        Expr::Name(ast::ExprName {
-                            range: TextRange::new(range.end() - "_".text_len(), range.end()),
-                            id: "_",
-                            ctx: ExprContext::Store,
-                        }),
-                        allocator,
-                    ),
+                    range: *range,
+                    value: allocator.alloc(Expr::Name(ast::ExprName {
+                        range: TextRange::new(range.end() - "_".text_len(), range.end()),
+                        id: "_",
+                        ctx: ExprContext::Store,
+                    })),
                     ctx: ExprContext::Store,
                 })
             }
@@ -135,43 +141,40 @@ pub(super) fn pattern_to_expr<'ast>(
             name,
         }) => match (pattern, name) {
             (Some(_), Some(_)) => Expr::Name(ast::ExprName {
-                range,
+                range: *range,
                 id: "",
                 ctx: ExprContext::Invalid,
             }),
-            (Some(pattern), None) => pattern_to_expr(pattern.into_inner(), allocator),
+            (Some(pattern), None) => pattern_to_expr(*pattern, allocator),
             (None, Some(name)) => Expr::Name(ast::ExprName {
                 range: name.range,
                 id: name.id,
                 ctx: ExprContext::Store,
             }),
             (None, None) => Expr::Name(ast::ExprName {
-                range,
+                range: *range,
                 id: "_",
                 ctx: ExprContext::Store,
             }),
         },
         Pattern::MatchOr(ast::PatternMatchOr { patterns, .. }) => {
-            let to_bin_expr = |left: Pattern<'ast>, right: Pattern<'ast>| ast::ExprBinOp {
+            let to_bin_expr = |left: &Pattern<'ast>, right: &Pattern<'ast>| ast::ExprBinOp {
                 range: TextRange::new(left.start(), right.end()),
-                left: ruff_allocator::Box::new_in(pattern_to_expr(left, allocator), allocator),
+                left: allocator.alloc(pattern_to_expr(left, allocator)),
                 op: ast::Operator::BitOr,
-                right: ruff_allocator::Box::new_in(pattern_to_expr(right, allocator), allocator),
+                right: allocator.alloc(pattern_to_expr(right, allocator)),
             };
 
-            let mut iter = patterns.into_iter();
+            let mut iter = (**patterns).into_iter();
 
             match (iter.next(), iter.next()) {
                 (Some(left), Some(right)) => {
                     Expr::BinOp(iter.fold(to_bin_expr(left, right), |expr_bin_op, pattern| {
                         ast::ExprBinOp {
                             range: TextRange::new(expr_bin_op.start(), pattern.end()),
-                            left: ruff_allocator::Box::new_in(Expr::BinOp(expr_bin_op), allocator),
+                            left: allocator.alloc(Expr::BinOp(expr_bin_op)),
                             op: ast::Operator::BitOr,
-                            right: ruff_allocator::Box::new_in(
-                                pattern_to_expr(pattern, allocator),
-                                allocator,
-                            ),
+                            right: allocator.alloc(pattern_to_expr(pattern, allocator)),
                         }
                     }))
                 }

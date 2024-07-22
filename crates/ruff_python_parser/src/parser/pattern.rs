@@ -1,3 +1,4 @@
+use ruff_allocator::CloneIn;
 use ruff_python_ast::{self as ast, Expr, ExprContext, Number, Operator, Pattern, Singleton};
 use ruff_text_size::{Ranged, TextSize};
 
@@ -97,7 +98,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 self.add_error(ParseErrorType::InvalidStarPatternUsage, &lhs);
             }
 
-            let mut patterns = vec![lhs];
+            let mut patterns = ruff_allocator::vec![in &self.allocator; lhs];
             let mut progress = ParserProgress::default();
 
             while self.eat(TokenKind::Vbar) {
@@ -123,7 +124,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             lhs = Pattern::MatchAs(ast::PatternMatchAs {
                 range: self.node_range(start),
                 name: Some(ident),
-                pattern: Some(self.alloc_box(lhs)),
+                pattern: Some(self.alloc(lhs)),
             });
         }
 
@@ -174,8 +175,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let start = self.node_start();
         self.bump(TokenKind::Lbrace);
 
-        let mut keys = vec![];
-        let mut patterns = vec![];
+        let mut keys = ruff_allocator::vec![in &self.allocator;];
+        let mut patterns = ruff_allocator::vec![in &self.allocator;];
         let mut rest = None;
 
         self.parse_comma_separated_list(RecoveryContextKind::MatchPatternMapping, |parser| {
@@ -198,7 +199,9 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 rest = Some(identifier);
             } else {
                 let key = match parser.parse_match_pattern_lhs(AllowStarPattern::No) {
-                    Pattern::MatchValue(ast::PatternMatchValue { value, .. }) => value.into_inner(),
+                    Pattern::MatchValue(ast::PatternMatchValue { value, .. }) => {
+                        value.clone_in(self.allocator)
+                    }
                     Pattern::MatchSingleton(ast::PatternMatchSingleton { value, range }) => {
                         match value {
                             Singleton::None => Expr::NoneLiteral(ast::ExprNoneLiteral { range }),
@@ -216,7 +219,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                             ParseErrorType::OtherError("Invalid mapping pattern key".to_string()),
                             &pattern,
                         );
-                        recovery::pattern_to_expr(pattern, &parser.allocator)
+                        recovery::pattern_to_expr(&pattern, &parser.allocator)
                     }
                 };
                 keys.push(key);
@@ -303,7 +306,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         if self.eat(parentheses.closing_kind()) {
             return Pattern::MatchSequence(ast::PatternMatchSequence {
-                patterns: vec![],
+                patterns: ruff_allocator::vec![in &self.allocator],
                 range: self.node_range(start),
             });
         }
@@ -345,7 +348,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             self.expect(TokenKind::Comma);
         }
 
-        let mut patterns = vec![first_element];
+        let mut patterns = ruff_allocator::vec![in &self.allocator; first_element];
 
         self.parse_comma_separated_list(
             RecoveryContextKind::SequenceMatchPattern(parentheses),
@@ -393,7 +396,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 let str = self.parse_strings();
 
                 Pattern::MatchValue(ast::PatternMatchValue {
-                    value: self.alloc_box(str),
+                    value: self.alloc(str),
                     range: self.node_range(start),
                 })
             }
@@ -404,7 +407,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 let range = self.node_range(start);
 
                 Pattern::MatchValue(ast::PatternMatchValue {
-                    value: self.alloc_box(Expr::NumberLiteral(ast::ExprNumberLiteral {
+                    value: self.alloc(Expr::NumberLiteral(ast::ExprNumberLiteral {
                         value: Number::Complex { real, imag },
                         range,
                     })),
@@ -418,7 +421,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 let range = self.node_range(start);
 
                 Pattern::MatchValue(ast::PatternMatchValue {
-                    value: self.alloc_box(Expr::NumberLiteral(ast::ExprNumberLiteral {
+                    value: self.alloc(Expr::NumberLiteral(ast::ExprNumberLiteral {
                         value: Number::Int(value),
                         range,
                     })),
@@ -432,7 +435,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 let range = self.node_range(start);
 
                 Pattern::MatchValue(ast::PatternMatchValue {
-                    value: self.alloc_box(Expr::NumberLiteral(ast::ExprNumberLiteral {
+                    value: self.alloc(Expr::NumberLiteral(ast::ExprNumberLiteral {
                         value: Number::Float(value),
                         range,
                     })),
@@ -461,7 +464,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                         }
 
                         return Pattern::MatchValue(ast::PatternMatchValue {
-                            value: self.alloc_box(Expr::UnaryOp(unary_expr)),
+                            value: self.alloc(Expr::UnaryOp(unary_expr)),
                             range: self.node_range(start),
                         });
                     }
@@ -480,7 +483,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                         let attribute = self.parse_attr_expr_for_match_pattern(id, start);
 
                         Pattern::MatchValue(ast::PatternMatchValue {
-                            value: self.alloc_box(attribute),
+                            value: self.alloc(attribute),
                             range: self.node_range(start),
                         })
                     } else {
@@ -515,7 +518,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     });
                     Pattern::MatchValue(ast::PatternMatchValue {
                         range: invalid_node.range(),
-                        value: self.alloc_box(invalid_node),
+                        value: self.alloc(invalid_node),
                     })
                 }
             }
@@ -549,7 +552,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             lhs.value
         } else {
             self.add_error(ParseErrorType::ExpectedRealNumber, &lhs);
-            self.alloc_box(recovery::pattern_to_expr(lhs, &self.allocator))
+            self.alloc(recovery::pattern_to_expr(&lhs, &self.allocator))
         };
 
         let rhs_pattern = self.parse_match_pattern_lhs(AllowStarPattern::No);
@@ -560,13 +563,13 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             rhs.value
         } else {
             self.add_error(ParseErrorType::ExpectedImaginaryNumber, &rhs_pattern);
-            self.alloc_box(recovery::pattern_to_expr(rhs_pattern, &self.allocator))
+            self.alloc(recovery::pattern_to_expr(&rhs_pattern, &self.allocator))
         };
 
         let range = self.node_range(start);
 
         ast::PatternMatchValue {
-            value: self.alloc_box(Expr::BinOp(ast::ExprBinOp {
+            value: self.alloc(Expr::BinOp(ast::ExprBinOp {
                 left: lhs_value,
                 op: operator,
                 right: rhs_value,
@@ -612,13 +615,13 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 ..
             }) => {
                 if ident.is_valid() {
-                    self.alloc_box(Expr::Name(ast::ExprName {
+                    self.alloc(Expr::Name(ast::ExprName {
                         range: ident.range(),
                         id: ident.id,
                         ctx: ExprContext::Load,
                     }))
                 } else {
-                    self.alloc_box(Expr::Name(ast::ExprName {
+                    self.alloc(Expr::Name(ast::ExprName {
                         range: ident.range(),
                         id: "",
                         ctx: ExprContext::Invalid,
@@ -635,14 +638,14 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     ParseErrorType::OtherError("Invalid value for a class pattern".to_string()),
                     &pattern,
                 );
-                self.alloc_box(recovery::pattern_to_expr(pattern, &self.allocator))
+                self.alloc(recovery::pattern_to_expr(&pattern, &self.allocator))
             }
         };
 
         self.bump(TokenKind::Lpar);
 
-        let mut patterns = vec![];
-        let mut keywords = vec![];
+        let mut patterns = ruff_allocator::vec![in &self.allocator;];
+        let mut keywords = ruff_allocator::vec![in &self.allocator;];
         let mut has_seen_pattern = false;
         let mut has_seen_keyword_pattern = false;
 

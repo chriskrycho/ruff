@@ -38,15 +38,15 @@ pub fn if_elif_branches<'a, 'ast>(
 ) -> impl Iterator<Item = IfElifBranch<'a, 'ast>> {
     iter::once(IfElifBranch {
         kind: BranchKind::If,
-        test: stmt_if.test.as_ref(),
-        body: stmt_if.body.as_slice(),
+        test: stmt_if.test,
+        body: &stmt_if.body,
         range: TextRange::new(stmt_if.start(), stmt_if.body.last().unwrap().end()),
     })
     .chain(stmt_if.elif_else_clauses.iter().filter_map(|clause| {
         Some(IfElifBranch {
             kind: BranchKind::Elif,
             test: clause.test.as_ref()?,
-            body: clause.body.as_slice(),
+            body: &clause.body,
             range: clause.range,
         })
     }))

@@ -1,11 +1,10 @@
-use std::fmt::Display;
-
-use rustc_hash::{FxBuildHasher, FxHashSet};
-
+use ruff_allocator::CollectIn;
 use ruff_python_ast::{
     self as ast, ExceptHandler, Expr, ExprContext, IpyEscapeKind, Operator, Stmt, WithItem,
 };
 use ruff_text_size::{Ranged, TextSize};
+use rustc_hash::{FxBuildHasher, FxHashSet};
+use std::fmt::Display;
 
 use crate::parser::expression::{ParsedExpr, EXPR_SET};
 use crate::parser::progress::ParserProgress;
@@ -114,12 +113,16 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             TokenKind::If => Stmt::If(self.parse_if_statement()),
             TokenKind::For => Stmt::For(self.parse_for_statement(start)),
             TokenKind::While => Stmt::While(self.parse_while_statement()),
-            TokenKind::Def => Stmt::FunctionDef(self.parse_function_definition(vec![], start)),
-            TokenKind::Class => Stmt::ClassDef(self.parse_class_definition(vec![], start)),
+            TokenKind::Def => Stmt::FunctionDef(
+                self.parse_function_definition(ruff_allocator::vec![in &self.allocator], start),
+            ),
+            TokenKind::Class => Stmt::ClassDef(
+                self.parse_class_definition(ruff_allocator::vec![in &self.allocator], start),
+            ),
             TokenKind::Try => Stmt::Try(self.parse_try_statement()),
             TokenKind::With => Stmt::With(self.parse_with_statement(start)),
             TokenKind::At => self.parse_decorators(),
-            TokenKind::Async => self.parse_async_statement(),
+            TokenKind::Async => return self.parse_async_statement(),
             token => {
                 if token == TokenKind::Match {
                     // Match is considered a soft keyword, so we will treat it as an identifier if
@@ -309,7 +312,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 } else {
                     Stmt::Expr(ast::StmtExpr {
                         range: self.node_range(start),
-                        value: self.alloc_box(parsed_expr.expr),
+                        value: self.alloc(parsed_expr.expr),
                     })
                 }
             }
@@ -389,7 +392,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             let value = self
                 .parse_expression_list(ExpressionContext::starred_bitwise_or())
                 .expr;
-            self.alloc_box(value)
+            self.alloc(value)
         });
 
         ast::StmtReturn {
@@ -430,7 +433,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 self.add_error(ParseErrorType::UnparenthesizedTupleExpression, &exc);
             }
 
-            Some(self.alloc_box(exc.expr))
+            Some(self.alloc(exc.expr))
         };
 
         let cause = (exc.is_some() && self.eat(TokenKind::From)).then(|| {
@@ -451,7 +454,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 self.add_error(ParseErrorType::UnparenthesizedTupleExpression, &cause);
             }
 
-            self.alloc_box(cause.expr)
+            self.alloc(cause.expr)
         });
 
         ast::StmtRaise {
@@ -763,7 +766,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 // assert False, yield x
                 // assert False, x := 1
                 let expression = self.parse_conditional_expression_or_higher().expr;
-                Some(self.alloc_box(expression))
+                Some(self.alloc(expression))
             } else {
                 // test_err assert_empty_msg
                 // assert x,
@@ -778,7 +781,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         };
 
         ast::StmtAssert {
-            test: self.alloc_box(test.expr),
+            test: self.alloc(test.expr),
             msg,
             range: self.node_range(start),
         }
@@ -894,9 +897,9 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let value = self.parse_conditional_expression_or_higher();
 
         ast::StmtTypeAlias {
-            name: self.alloc_box(name),
+            name: self.alloc(name),
             type_params,
-            value: self.alloc_box(value.expr),
+            value: self.alloc(value.expr),
             range: self.node_range(start),
         }
     }
@@ -1037,7 +1040,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     ) -> ast::StmtAssign<'ast> {
         self.bump(TokenKind::Equal);
 
-        let mut targets = vec![target.expr];
+        let mut targets = ruff_allocator::vec![in &self.allocator; target.expr];
 
         // test_err assign_stmt_missing_rhs
         // x =
@@ -1089,7 +1092,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         ast::StmtAssign {
             targets,
-            value: self.alloc_box(value.expr),
+            value: self.alloc(value.expr),
             range: self.node_range(start),
         }
     }
@@ -1150,7 +1153,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 let expression = self
                     .parse_expression_list(ExpressionContext::yield_or_starred_bitwise_or())
                     .expr;
-                Some(self.alloc_box(expression))
+                Some(self.alloc(expression))
             } else {
                 // test_err ann_assign_stmt_missing_rhs
                 // x: int =
@@ -1165,8 +1168,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         };
 
         ast::StmtAnnAssign {
-            target: self.alloc_box(target.expr),
-            annotation: self.alloc_box(annotation.expr),
+            target: self.alloc(target.expr),
+            annotation: self.alloc(annotation.expr),
             value,
             simple,
             range: self.node_range(start),
@@ -1220,9 +1223,9 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let value = self.parse_expression_list(ExpressionContext::yield_or_starred_bitwise_or());
 
         ast::StmtAugAssign {
-            target: self.alloc_box(target.expr),
+            target: self.alloc(target.expr),
             op,
-            value: self.alloc_box(value.expr),
+            value: self.alloc(value.expr),
             range: self.node_range(start),
         }
     }
@@ -1275,7 +1278,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
 
         ast::StmtIf {
-            test: self.alloc_box(test.expr),
+            test: self.alloc(test.expr),
             body,
             elif_else_clauses,
             range: self.node_range(start),
@@ -1489,7 +1492,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     &parsed_expr,
                 );
             }
-            Some(self.alloc_box(parsed_expr.expr))
+            Some(self.alloc(parsed_expr.expr))
         } else {
             if block_kind.is_star() || self.at(TokenKind::As) {
                 // test_err except_stmt_missing_exception
@@ -1639,8 +1642,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         };
 
         ast::StmtFor {
-            target: self.alloc_box(target.expr),
-            iter: self.alloc_box(iter.expr),
+            target: self.alloc(target.expr),
+            iter: self.alloc(iter.expr),
             is_async: false,
             body,
             orelse,
@@ -1688,7 +1691,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         };
 
         ast::StmtWhile {
-            test: self.alloc_box(test.expr),
+            test: self.alloc(test.expr),
             body,
             orelse,
             range: self.node_range(start),
@@ -1709,7 +1712,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     /// See: <https://docs.python.org/3/reference/compound_stmts.html#function-definitions>
     fn parse_function_definition(
         &mut self,
-        decorator_list: Vec<ast::Decorator<'ast>>,
+        decorator_list: ruff_allocator::Vec<'ast, ast::Decorator<'ast>>,
         start: TextSize,
     ) -> ast::StmtFunctionDef<'ast> {
         self.bump(TokenKind::Def);
@@ -1775,7 +1778,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     );
                 }
 
-                Some(self.alloc_box(returns.expr))
+                Some(self.alloc(returns.expr))
             } else {
                 // test_err function_def_missing_return_type
                 // def foo() -> : ...
@@ -1800,8 +1803,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         ast::StmtFunctionDef {
             name,
-            type_params: type_params.map(|params| self.alloc_box(params)),
-            parameters: self.alloc_box(parameters),
+            type_params: type_params.map(|params| self.alloc(params)),
+            parameters: self.alloc(parameters),
             body,
             decorator_list,
             is_async: false,
@@ -1822,7 +1825,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     /// See: <https://docs.python.org/3/reference/compound_stmts.html#grammar-token-python-grammar-classdef>
     fn parse_class_definition(
         &mut self,
-        decorator_list: Vec<ast::Decorator<'ast>>,
+        decorator_list: ruff_allocator::Vec<'ast, ast::Decorator<'ast>>,
         start: TextSize,
     ) -> ast::StmtClassDef<'ast> {
         self.bump(TokenKind::Class);
@@ -1844,7 +1847,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         // class Foo(): ...
         let arguments = self.at(TokenKind::Lpar).then(|| {
             let arguments = self.parse_arguments();
-            self.alloc_box(arguments)
+            self.alloc(arguments)
         });
 
         self.expect(TokenKind::Colon);
@@ -1859,7 +1862,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             range: self.node_range(start),
             decorator_list,
             name,
-            type_params: type_params.map(|params| self.alloc_box(params)),
+            type_params: type_params.map(|params| self.alloc(params)),
             arguments,
             body,
         }
@@ -1894,7 +1897,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     /// Parses a list of with items.
     ///
     /// See: <https://docs.python.org/3/reference/compound_stmts.html#the-with-statement>
-    fn parse_with_items(&mut self) -> Vec<WithItem<'ast>> {
+    fn parse_with_items(&mut self) -> ruff_allocator::Vec<'ast, WithItem<'ast>> {
         if !self.at_expr() {
             self.add_error(
                 ParseErrorType::OtherError(
@@ -1902,7 +1905,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 ),
                 self.current_token_range(),
             );
-            return vec![];
+            return ruff_allocator::vec![in &self.allocator];
         }
 
         if self.at(TokenKind::Lpar) {
@@ -1965,7 +1968,9 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     /// If the parser isn't positioned at a `(` token.
     ///
     /// See: <https://docs.python.org/3/reference/compound_stmts.html#grammar-token-python-grammar-with_stmt_contents>
-    fn try_parse_parenthesized_with_items(&mut self) -> Option<Vec<WithItem<'ast>>> {
+    fn try_parse_parenthesized_with_items(
+        &mut self,
+    ) -> Option<ruff_allocator::Vec<'ast, WithItem<'ast>>> {
         let checkpoint = self.checkpoint();
 
         // We'll start with the assumption that the with items are parenthesized.
@@ -2061,7 +2066,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 parsed_with_items
                     .into_iter()
                     .map(|parsed_with_item| parsed_with_item.item)
-                    .collect(),
+                    .collect_in(self.allocator),
             )
         } else {
             self.rewind(checkpoint);
@@ -2107,7 +2112,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         let optional_vars = self.at(TokenKind::As).then(|| {
             let vars = self.parse_with_item_optional_vars().expr;
-            self.alloc_box(vars)
+            self.alloc(vars)
         });
 
         ParsedWithItem {
@@ -2181,7 +2186,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 let cases = self.parse_match_body();
 
                 Some(ast::StmtMatch {
-                    subject: self.alloc_box(subject),
+                    subject: self.alloc(subject),
                     cases,
                     range: self.node_range(start),
                 })
@@ -2203,7 +2208,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 let cases = self.parse_match_body();
 
                 Some(ast::StmtMatch {
-                    subject: self.alloc_box(subject),
+                    subject: self.alloc(subject),
                     cases,
                     range: self.node_range(start),
                 })
@@ -2234,7 +2239,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let cases = self.parse_match_body();
 
         ast::StmtMatch {
-            subject: self.alloc_box(subject),
+            subject: self.alloc(subject),
             cases,
             range: self.node_range(start),
         }
@@ -2387,7 +2392,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 let guard = self
                     .parse_named_expression_or_higher(ExpressionContext::default())
                     .expr;
-                Some(self.alloc_box(guard))
+                Some(self.alloc(guard))
             } else {
                 // test_err match_stmt_missing_guard_expr
                 // match x:
@@ -2436,7 +2441,10 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             // async def foo(): ...
             TokenKind::Def => Stmt::FunctionDef(ast::StmtFunctionDef {
                 is_async: true,
-                ..self.parse_function_definition(vec![], async_start)
+                ..self.parse_function_definition(
+                    ruff_allocator::vec![in &self.allocator],
+                    async_start,
+                )
             }),
 
             // test_ok async_with_statement
@@ -2479,7 +2487,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     fn parse_decorators(&mut self) -> Stmt<'ast> {
         let start = self.node_start();
 
-        let mut decorators = vec![];
+        let mut decorators = ruff_allocator::vec![in &self.allocator];
         let mut progress = ParserProgress::default();
 
         // test_err decorator_missing_expression
@@ -2675,7 +2683,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                             self.parse_conditional_expression_or_higher()
                         }
                     };
-                    Some(self.alloc_box(parsed_expr.expr))
+                    Some(self.alloc(parsed_expr.expr))
                 } else {
                     // test_err param_missing_annotation
                     // def foo(x:): ...
@@ -2725,7 +2733,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 // def foo(x=(*int)): ...
                 // def foo(x=yield y): ...
                 let expression = self.parse_conditional_expression_or_higher().expr;
-                Some(self.alloc_box(expression))
+                Some(self.alloc(expression))
             } else {
                 // test_err param_missing_default
                 // def foo(x=): ...
@@ -2765,7 +2773,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         // the parser will drop the previous ones. Another thing is the vararg and kwarg
         // uses `Parameter` (not `ParameterWithDefault`) which means that the parser cannot
         // recover well from `*args=(1, 2)`.
-        let mut parameters = ast::Parameters::default();
+        let mut parameters = ast::Parameters::new_in(self.allocator);
 
         let mut seen_default_param = false; // `a=10`
         let mut seen_positional_only_separator = false; // `/`
@@ -2824,7 +2832,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                         // TODO(dhruvmanila): The AST doesn't allow multiple `vararg`, so let's
                         // choose to keep the first one so that the parameters remain in preorder.
                         if parameters.vararg.is_none() {
-                            parameters.vararg = Some(parser.alloc_box(param));
+                            parameters.vararg = Some(parser.alloc(param));
                         }
 
                         last_keyword_only_separator_range = None;
@@ -2898,7 +2906,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                         );
                     }
 
-                    parameters.kwarg = Some(parser.alloc_box(param));
+                    parameters.kwarg = Some(parser.alloc(param));
                     last_keyword_only_separator_range = None;
                 }
                 TokenKind::Slash => {
@@ -3094,7 +3102,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                             ExpressionContext::starred_bitwise_or(),
                         )
                         .expr;
-                    Some(self.alloc_box(expression))
+                    Some(self.alloc(expression))
                 } else {
                     // test_err type_param_type_var_tuple_missing_default
                     // type X[*Ts =] = int
@@ -3134,7 +3142,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     // type X[**P = x := int] = int
                     // type X[**P = *int] = int
                     let expression = self.parse_conditional_expression_or_higher().expr;
-                    Some(self.alloc_box(expression))
+                    Some(self.alloc(expression))
                 } else {
                     // test_err type_param_param_spec_missing_default
                     // type X[**P =] = int
@@ -3173,7 +3181,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     // type X[T: yield from x] = int
                     // type X[T: x := int] = int
                     let expression = self.parse_conditional_expression_or_higher().expr;
-                    Some(self.alloc_box(expression))
+                    Some(self.alloc(expression))
                 } else {
                     // test_err type_param_missing_bound
                     // type X[T: ] = int
@@ -3198,7 +3206,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     // type X[T = x := int] = int
                     // type X[T: int = *int] = int
                     let expression = self.parse_conditional_expression_or_higher().expr;
-                    Some(self.alloc_box(expression))
+                    Some(self.alloc(expression))
                 } else {
                     // test_err type_param_type_var_missing_default
                     // type X[T =] = int
@@ -3233,7 +3241,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         match expr {
             Expr::Starred(ast::ExprStarred { value, .. }) => self.validate_assignment_target(value),
             Expr::List(ast::ExprList { elts, .. }) | Expr::Tuple(ast::ExprTuple { elts, .. }) => {
-                for expr in elts {
+                for expr in elts.iter() {
                     self.validate_assignment_target(expr);
                 }
             }
@@ -3273,7 +3281,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     fn validate_delete_target(&mut self, expr: &Expr<'ast>) {
         match expr {
             Expr::List(ast::ExprList { elts, .. }) | Expr::Tuple(ast::ExprTuple { elts, .. }) => {
-                for expr in elts {
+                for expr in elts.iter() {
                     self.validate_delete_target(expr);
                 }
             }

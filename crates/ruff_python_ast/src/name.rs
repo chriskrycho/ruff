@@ -382,7 +382,7 @@ impl<'a> UnqualifiedName<'a> {
             _ => return None,
         };
 
-        let attr2 = match attr1.value.as_ref() {
+        let attr2 = match &attr1.value {
             Expr::Attribute(attr2) => attr2,
             // Ex) `foo.bar`
             Expr::Name(nodes::ExprName { id, .. }) => {
@@ -391,7 +391,7 @@ impl<'a> UnqualifiedName<'a> {
             _ => return None,
         };
 
-        let attr3 = match attr2.value.as_ref() {
+        let attr3 = match &attr2.value {
             Expr::Attribute(attr3) => attr3,
             // Ex) `foo.bar.baz`
             Expr::Name(nodes::ExprName { id, .. }) => {
@@ -404,7 +404,7 @@ impl<'a> UnqualifiedName<'a> {
             _ => return None,
         };
 
-        let attr4 = match attr3.value.as_ref() {
+        let attr4 = match &attr3.value {
             Expr::Attribute(attr4) => attr4,
             // Ex) `foo.bar.baz.bop`
             Expr::Name(nodes::ExprName { id, .. }) => {
@@ -418,7 +418,7 @@ impl<'a> UnqualifiedName<'a> {
             _ => return None,
         };
 
-        let attr5 = match attr4.value.as_ref() {
+        let attr5 = match &attr4.value {
             Expr::Attribute(attr5) => attr5,
             // Ex) `foo.bar.baz.bop.bap`
             Expr::Name(nodes::ExprName { id, .. }) => {
@@ -433,7 +433,7 @@ impl<'a> UnqualifiedName<'a> {
             _ => return None,
         };
 
-        let attr6 = match attr5.value.as_ref() {
+        let attr6 = match &attr5.value {
             Expr::Attribute(attr6) => attr6,
             // Ex) `foo.bar.baz.bop.bap.bab`
             Expr::Name(nodes::ExprName { id, .. }) => {
@@ -449,7 +449,7 @@ impl<'a> UnqualifiedName<'a> {
             _ => return None,
         };
 
-        let attr7 = match attr6.value.as_ref() {
+        let attr7 = match &attr6.value {
             Expr::Attribute(attr7) => attr7,
             // Ex) `foo.bar.baz.bop.bap.bab.bob`
             Expr::Name(nodes::ExprName { id, .. }) => {
@@ -466,7 +466,7 @@ impl<'a> UnqualifiedName<'a> {
             _ => return None,
         };
 
-        let attr8 = match attr7.value.as_ref() {
+        let attr8 = match &attr7.value {
             Expr::Attribute(attr8) => attr8,
             // Ex) `foo.bar.baz.bop.bap.bab.bob.bib`
             Expr::Name(nodes::ExprName { id, .. }) => {

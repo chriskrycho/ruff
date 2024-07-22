@@ -146,10 +146,6 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
     }
 
-    fn alloc_box<T>(&self, value: T) -> ruff_allocator::Box<'ast, T> {
-        ruff_allocator::Box::new_in(value, &self.allocator)
-    }
-
     fn alloc<T>(&self, value: T) -> &'ast mut T {
         self.allocator.alloc(value)
     }
@@ -527,8 +523,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         &mut self,
         recovery_context_kind: RecoveryContextKind,
         parse_element: impl Fn(&mut Parser<'src, 'ast>) -> T,
-    ) -> Vec<T> {
-        let mut elements = Vec::new();
+    ) -> ruff_allocator::Vec<'ast, T> {
+        let mut elements = ruff_allocator::vec![in &self.allocator];
         self.parse_comma_separated_list(recovery_context_kind, |p| elements.push(parse_element(p)));
         elements
     }

@@ -76,10 +76,10 @@ fn parse_simple_type_annotation<'a>(
 }
 
 fn parse_complex_type_annotation<'ast>(
-    string_expr: &ExprStringLiteral<'_>,
+    string_expr: &ExprStringLiteral<'ast>,
     allocator: &'ast Allocator,
 ) -> Result<(Parsed<ModExpression<'ast>>, AnnotationKind), ParseError> {
-    let mut parsed = parse_expression(string_expr.value.to_str(), allocator)?;
+    let mut parsed = parse_expression(string_expr.value.to_str(allocator), allocator)?;
     relocate_expr(parsed.expr_mut(), string_expr.range());
     Ok((parsed, AnnotationKind::Complex))
 }

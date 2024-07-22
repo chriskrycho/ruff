@@ -1,7 +1,7 @@
 #![allow(clippy::derive_partial_eq_without_eq)]
 
 use std::fmt;
-use std::fmt::Debug;
+use std::fmt::{Debug, Write};
 use std::iter::FusedIterator;
 use std::ops::{Deref, DerefMut};
 use std::slice::{Iter, IterMut};
@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 
 use bitflags::bitflags;
 use itertools::Itertools;
-use ruff_allocator::{Allocator, Box, CloneIn};
+use ruff_allocator::{Allocator, CloneIn};
 
 use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
 
@@ -31,7 +31,7 @@ pub enum Mod<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ModModule<'ast> {
     pub range: TextRange,
-    pub body: Vec<Stmt<'ast>>,
+    pub body: Suite<'ast>,
 }
 
 impl<'ast> From<ModModule<'ast>> for Mod<'ast> {
@@ -185,12 +185,12 @@ impl<'ast> From<StmtIpyEscapeCommand<'ast>> for Stmt<'ast> {
 pub struct StmtFunctionDef<'ast> {
     pub range: TextRange,
     pub is_async: bool,
-    pub decorator_list: Vec<Decorator<'ast>>,
+    pub decorator_list: ruff_allocator::Vec<'ast, Decorator<'ast>>,
     pub name: Identifier<'ast>,
-    pub type_params: Option<Box<'ast, TypeParams<'ast>>>,
-    pub parameters: Box<'ast, Parameters<'ast>>,
-    pub returns: Option<Box<'ast, Expr<'ast>>>,
-    pub body: Vec<Stmt<'ast>>,
+    pub type_params: Option<&'ast mut TypeParams<'ast>>,
+    pub parameters: &'ast mut Parameters<'ast>,
+    pub returns: Option<&'ast mut Expr<'ast>>,
+    pub body: Suite<'ast>,
 }
 
 impl<'ast> From<StmtFunctionDef<'ast>> for Stmt<'ast> {
@@ -203,11 +203,11 @@ impl<'ast> From<StmtFunctionDef<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtClassDef<'ast> {
     pub range: TextRange,
-    pub decorator_list: Vec<Decorator<'ast>>,
+    pub decorator_list: ruff_allocator::Vec<'ast, Decorator<'ast>>,
     pub name: Identifier<'ast>,
-    pub type_params: Option<Box<'ast, TypeParams<'ast>>>,
-    pub arguments: Option<Box<'ast, Arguments<'ast>>>,
-    pub body: Vec<Stmt<'ast>>,
+    pub type_params: Option<&'ast mut TypeParams<'ast>>,
+    pub arguments: Option<&'ast mut Arguments<'ast>>,
+    pub body: Suite<'ast>,
 }
 
 impl<'ast> StmtClassDef<'ast> {
@@ -238,7 +238,7 @@ impl<'ast> From<StmtClassDef<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtReturn<'ast> {
     pub range: TextRange,
-    pub value: Option<Box<'ast, Expr<'ast>>>,
+    pub value: Option<&'ast mut Expr<'ast>>,
 }
 
 impl<'ast> From<StmtReturn<'ast>> for Stmt<'ast> {
@@ -251,7 +251,7 @@ impl<'ast> From<StmtReturn<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtDelete<'ast> {
     pub range: TextRange,
-    pub targets: Vec<Expr<'ast>>,
+    pub targets: ruff_allocator::Vec<'ast, Expr<'ast>>,
 }
 
 impl<'ast> From<StmtDelete<'ast>> for Stmt<'ast> {
@@ -264,9 +264,9 @@ impl<'ast> From<StmtDelete<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtTypeAlias<'ast> {
     pub range: TextRange,
-    pub name: Box<'ast, Expr<'ast>>,
+    pub name: &'ast mut Expr<'ast>,
     pub type_params: Option<TypeParams<'ast>>,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<StmtTypeAlias<'ast>> for Stmt<'ast> {
@@ -279,8 +279,8 @@ impl<'ast> From<StmtTypeAlias<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtAssign<'ast> {
     pub range: TextRange,
-    pub targets: Vec<Expr<'ast>>,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub targets: ruff_allocator::Vec<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<StmtAssign<'ast>> for Stmt<'ast> {
@@ -293,9 +293,9 @@ impl<'ast> From<StmtAssign<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtAugAssign<'ast> {
     pub range: TextRange,
-    pub target: Box<'ast, Expr<'ast>>,
+    pub target: &'ast mut Expr<'ast>,
     pub op: Operator,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<StmtAugAssign<'ast>> for Stmt<'ast> {
@@ -308,9 +308,9 @@ impl<'ast> From<StmtAugAssign<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtAnnAssign<'ast> {
     pub range: TextRange,
-    pub target: Box<'ast, Expr<'ast>>,
-    pub annotation: Box<'ast, Expr<'ast>>,
-    pub value: Option<Box<'ast, Expr<'ast>>>,
+    pub target: &'ast mut Expr<'ast>,
+    pub annotation: &'ast mut Expr<'ast>,
+    pub value: Option<&'ast mut Expr<'ast>>,
     pub simple: bool,
 }
 
@@ -329,10 +329,10 @@ impl<'ast> From<StmtAnnAssign<'ast>> for Stmt<'ast> {
 pub struct StmtFor<'ast> {
     pub range: TextRange,
     pub is_async: bool,
-    pub target: Box<'ast, Expr<'ast>>,
-    pub iter: Box<'ast, Expr<'ast>>,
-    pub body: Vec<Stmt<'ast>>,
-    pub orelse: Vec<Stmt<'ast>>,
+    pub target: &'ast mut Expr<'ast>,
+    pub iter: &'ast mut Expr<'ast>,
+    pub body: Suite<'ast>,
+    pub orelse: Suite<'ast>,
 }
 
 impl<'ast> From<StmtFor<'ast>> for Stmt<'ast> {
@@ -346,9 +346,9 @@ impl<'ast> From<StmtFor<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtWhile<'ast> {
     pub range: TextRange,
-    pub test: Box<'ast, Expr<'ast>>,
-    pub body: Vec<Stmt<'ast>>,
-    pub orelse: Vec<Stmt<'ast>>,
+    pub test: &'ast mut Expr<'ast>,
+    pub body: Suite<'ast>,
+    pub orelse: Suite<'ast>,
 }
 
 impl<'ast> From<StmtWhile<'ast>> for Stmt<'ast> {
@@ -361,8 +361,8 @@ impl<'ast> From<StmtWhile<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtIf<'ast> {
     pub range: TextRange,
-    pub test: Box<'ast, Expr<'ast>>,
-    pub body: Vec<Stmt<'ast>>,
+    pub test: &'ast mut Expr<'ast>,
+    pub body: Suite<'ast>,
     pub elif_else_clauses: Vec<ElifElseClause<'ast>>,
 }
 
@@ -376,7 +376,7 @@ impl<'ast> From<StmtIf<'ast>> for Stmt<'ast> {
 pub struct ElifElseClause<'ast> {
     pub range: TextRange,
     pub test: Option<Expr<'ast>>,
-    pub body: Vec<Stmt<'ast>>,
+    pub body: Suite<'ast>,
 }
 
 /// See also [With](https://docs.python.org/3/library/ast.html#ast.With) and
@@ -388,8 +388,8 @@ pub struct ElifElseClause<'ast> {
 pub struct StmtWith<'ast> {
     pub range: TextRange,
     pub is_async: bool,
-    pub items: Vec<WithItem<'ast>>,
-    pub body: Vec<Stmt<'ast>>,
+    pub items: ruff_allocator::Vec<'ast, WithItem<'ast>>,
+    pub body: Suite<'ast>,
 }
 
 impl<'ast> From<StmtWith<'ast>> for Stmt<'ast> {
@@ -402,7 +402,7 @@ impl<'ast> From<StmtWith<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtMatch<'ast> {
     pub range: TextRange,
-    pub subject: Box<'ast, Expr<'ast>>,
+    pub subject: &'ast mut Expr<'ast>,
     pub cases: Vec<MatchCase<'ast>>,
 }
 
@@ -416,8 +416,8 @@ impl<'ast> From<StmtMatch<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtRaise<'ast> {
     pub range: TextRange,
-    pub exc: Option<Box<'ast, Expr<'ast>>>,
-    pub cause: Option<Box<'ast, Expr<'ast>>>,
+    pub exc: Option<&'ast mut Expr<'ast>>,
+    pub cause: Option<&'ast mut Expr<'ast>>,
 }
 
 impl<'ast> From<StmtRaise<'ast>> for Stmt<'ast> {
@@ -431,10 +431,10 @@ impl<'ast> From<StmtRaise<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtTry<'ast> {
     pub range: TextRange,
-    pub body: Vec<Stmt<'ast>>,
+    pub body: Suite<'ast>,
     pub handlers: Vec<ExceptHandler<'ast>>,
-    pub orelse: Vec<Stmt<'ast>>,
-    pub finalbody: Vec<Stmt<'ast>>,
+    pub orelse: Suite<'ast>,
+    pub finalbody: Suite<'ast>,
     pub is_star: bool,
 }
 
@@ -448,8 +448,8 @@ impl<'ast> From<StmtTry<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtAssert<'ast> {
     pub range: TextRange,
-    pub test: Box<'ast, Expr<'ast>>,
-    pub msg: Option<Box<'ast, Expr<'ast>>>,
+    pub test: &'ast mut Expr<'ast>,
+    pub msg: Option<&'ast mut Expr<'ast>>,
 }
 
 impl<'ast> From<StmtAssert<'ast>> for Stmt<'ast> {
@@ -462,7 +462,7 @@ impl<'ast> From<StmtAssert<'ast>> for Stmt<'ast> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct StmtImport<'ast> {
     pub range: TextRange,
-    pub names: Vec<Alias<'ast>>,
+    pub names: ruff_allocator::Vec<'ast, Alias<'ast>>,
 }
 
 impl<'ast> From<StmtImport<'ast>> for Stmt<'ast> {
@@ -490,7 +490,7 @@ impl<'ast> From<StmtImportFrom<'ast>> for Stmt<'ast> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct StmtGlobal<'ast> {
     pub range: TextRange,
-    pub names: Vec<Identifier<'ast>>,
+    pub names: ruff_allocator::Vec<'ast, Identifier<'ast>>,
 }
 
 impl<'ast> From<StmtGlobal<'ast>> for Stmt<'ast> {
@@ -503,7 +503,7 @@ impl<'ast> From<StmtGlobal<'ast>> for Stmt<'ast> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct StmtNonlocal<'ast> {
     pub range: TextRange,
-    pub names: Vec<Identifier<'ast>>,
+    pub names: ruff_allocator::Vec<'ast, Identifier<'ast>>,
 }
 
 impl<'ast> From<StmtNonlocal<'ast>> for Stmt<'ast> {
@@ -516,7 +516,7 @@ impl<'ast> From<StmtNonlocal<'ast>> for Stmt<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct StmtExpr<'ast> {
     pub range: TextRange,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<StmtExpr<'ast>> for Stmt<'ast> {
@@ -632,6 +632,12 @@ pub enum Expr<'ast> {
     IpyEscapeCommand(ExprIpyEscapeCommand<'ast>),
 }
 
+impl<'ast> CloneIn<'ast> for Expr<'ast> {
+    fn clone_in(&self, allocator: &'ast Allocator) -> Self {
+        todo!()
+    }
+}
+
 impl<'ast> Expr<'ast> {
     /// Returns `true` if the expression is a literal expression.
     ///
@@ -663,12 +669,6 @@ impl<'ast> Expr<'ast> {
     }
 }
 
-impl<'ast> CloneIn<'ast> for Expr<'ast> {
-    fn clone_in(&self, allocator: &'ast Allocator) -> Self {
-        todo!();
-    }
-}
-
 /// An AST node used to represent a IPython escape command at the expression level.
 ///
 /// For example,
@@ -680,7 +680,7 @@ impl<'ast> CloneIn<'ast> for Expr<'ast> {
 ///
 /// For more information related to terminology and syntax of escape commands,
 /// see [`StmtIpyEscapeCommand`].
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ExprIpyEscapeCommand<'ast> {
     pub range: TextRange,
     pub kind: IpyEscapeKind,
@@ -698,7 +698,7 @@ impl<'ast> From<ExprIpyEscapeCommand<'ast>> for Expr<'ast> {
 pub struct ExprBoolOp<'ast> {
     pub range: TextRange,
     pub op: BoolOp,
-    pub values: Vec<Expr<'ast>>,
+    pub values: ruff_allocator::Vec<'ast, Expr<'ast>>,
 }
 
 impl<'ast> From<ExprBoolOp<'ast>> for Expr<'ast> {
@@ -711,8 +711,8 @@ impl<'ast> From<ExprBoolOp<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprNamed<'ast> {
     pub range: TextRange,
-    pub target: Box<'ast, Expr<'ast>>,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub target: &'ast mut Expr<'ast>,
+    pub value: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<ExprNamed<'ast>> for Expr<'ast> {
@@ -725,9 +725,9 @@ impl<'ast> From<ExprNamed<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprBinOp<'ast> {
     pub range: TextRange,
-    pub left: Box<'ast, Expr<'ast>>,
+    pub left: &'ast mut Expr<'ast>,
     pub op: Operator,
-    pub right: Box<'ast, Expr<'ast>>,
+    pub right: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<ExprBinOp<'ast>> for Expr<'ast> {
@@ -741,7 +741,7 @@ impl<'ast> From<ExprBinOp<'ast>> for Expr<'ast> {
 pub struct ExprUnaryOp<'ast> {
     pub range: TextRange,
     pub op: UnaryOp,
-    pub operand: Box<'ast, Expr<'ast>>,
+    pub operand: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<ExprUnaryOp<'ast>> for Expr<'ast> {
@@ -754,8 +754,8 @@ impl<'ast> From<ExprUnaryOp<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprLambda<'ast> {
     pub range: TextRange,
-    pub parameters: Option<Box<'ast, Parameters<'ast>>>,
-    pub body: Box<'ast, Expr<'ast>>,
+    pub parameters: Option<&'ast mut Parameters<'ast>>,
+    pub body: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<ExprLambda<'ast>> for Expr<'ast> {
@@ -768,9 +768,9 @@ impl<'ast> From<ExprLambda<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprIf<'ast> {
     pub range: TextRange,
-    pub test: Box<'ast, Expr<'ast>>,
-    pub body: Box<'ast, Expr<'ast>>,
-    pub orelse: Box<'ast, Expr<'ast>>,
+    pub test: &'ast mut Expr<'ast>,
+    pub body: &'ast mut Expr<'ast>,
+    pub orelse: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<ExprIf<'ast>> for Expr<'ast> {
@@ -831,7 +831,7 @@ impl Ranged for DictItem<'_> {
 #[derive(Debug, PartialEq)]
 pub struct ExprDict<'ast> {
     pub range: TextRange,
-    pub items: Vec<DictItem<'ast>>,
+    pub items: ruff_allocator::Vec<'ast, DictItem<'ast>>,
 }
 
 impl<'ast> ExprDict<'ast> {
@@ -958,7 +958,7 @@ impl ExactSizeIterator for DictValueIterator<'_, '_> {}
 #[derive(Debug, PartialEq)]
 pub struct ExprSet<'ast> {
     pub range: TextRange,
-    pub elts: Vec<Expr<'ast>>,
+    pub elts: ruff_allocator::Vec<'ast, Expr<'ast>>,
 }
 
 impl<'ast> From<ExprSet<'ast>> for Expr<'ast> {
@@ -971,8 +971,8 @@ impl<'ast> From<ExprSet<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprListComp<'ast> {
     pub range: TextRange,
-    pub elt: Box<'ast, Expr<'ast>>,
-    pub generators: Vec<Comprehension<'ast>>,
+    pub elt: &'ast mut Expr<'ast>,
+    pub generators: ruff_allocator::Vec<'ast, Comprehension<'ast>>,
 }
 
 impl<'ast> From<ExprListComp<'ast>> for Expr<'ast> {
@@ -985,8 +985,8 @@ impl<'ast> From<ExprListComp<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprSetComp<'ast> {
     pub range: TextRange,
-    pub elt: Box<'ast, Expr<'ast>>,
-    pub generators: Vec<Comprehension<'ast>>,
+    pub elt: &'ast mut Expr<'ast>,
+    pub generators: ruff_allocator::Vec<'ast, Comprehension<'ast>>,
 }
 
 impl<'ast> From<ExprSetComp<'ast>> for Expr<'ast> {
@@ -999,9 +999,9 @@ impl<'ast> From<ExprSetComp<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprDictComp<'ast> {
     pub range: TextRange,
-    pub key: Box<'ast, Expr<'ast>>,
-    pub value: Box<'ast, Expr<'ast>>,
-    pub generators: Vec<Comprehension<'ast>>,
+    pub key: &'ast mut Expr<'ast>,
+    pub value: &'ast mut Expr<'ast>,
+    pub generators: ruff_allocator::Vec<'ast, Comprehension<'ast>>,
 }
 
 impl<'ast> From<ExprDictComp<'ast>> for Expr<'ast> {
@@ -1014,8 +1014,8 @@ impl<'ast> From<ExprDictComp<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprGenerator<'ast> {
     pub range: TextRange,
-    pub elt: Box<'ast, Expr<'ast>>,
-    pub generators: Vec<Comprehension<'ast>>,
+    pub elt: &'ast mut Expr<'ast>,
+    pub generators: ruff_allocator::Vec<'ast, Comprehension<'ast>>,
     pub parenthesized: bool,
 }
 
@@ -1029,7 +1029,7 @@ impl<'ast> From<ExprGenerator<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprAwait<'ast> {
     pub range: TextRange,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<ExprAwait<'ast>> for Expr<'ast> {
@@ -1042,7 +1042,7 @@ impl<'ast> From<ExprAwait<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprYield<'ast> {
     pub range: TextRange,
-    pub value: Option<Box<'ast, Expr<'ast>>>,
+    pub value: Option<&'ast mut Expr<'ast>>,
 }
 
 impl<'ast> From<ExprYield<'ast>> for Expr<'ast> {
@@ -1055,7 +1055,7 @@ impl<'ast> From<ExprYield<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprYieldFrom<'ast> {
     pub range: TextRange,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<ExprYieldFrom<'ast>> for Expr<'ast> {
@@ -1068,9 +1068,9 @@ impl<'ast> From<ExprYieldFrom<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprCompare<'ast> {
     pub range: TextRange,
-    pub left: Box<'ast, Expr<'ast>>,
-    pub ops: &'ast mut [CmpOp],
-    pub comparators: &'ast mut [Expr<'ast>],
+    pub left: &'ast mut Expr<'ast>,
+    pub ops: ruff_allocator::Vec<'ast, CmpOp>,
+    pub comparators: ruff_allocator::Vec<'ast, Expr<'ast>>,
 }
 
 impl<'ast> From<ExprCompare<'ast>> for Expr<'ast> {
@@ -1083,7 +1083,7 @@ impl<'ast> From<ExprCompare<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprCall<'ast> {
     pub range: TextRange,
-    pub func: Box<'ast, Expr<'ast>>,
+    pub func: &'ast mut Expr<'ast>,
     pub arguments: Arguments<'ast>,
 }
 
@@ -1109,10 +1109,10 @@ impl Ranged for FStringFormatSpec<'_> {
 #[derive(Debug, PartialEq)]
 pub struct FStringExpressionElement<'ast> {
     pub range: TextRange,
-    pub expression: Box<'ast, Expr<'ast>>,
-    pub debug_text: Option<DebugText>,
+    pub expression: &'ast mut Expr<'ast>,
+    pub debug_text: Option<DebugText<'ast>>,
     pub conversion: ConversionFlag,
-    pub format_spec: Option<Box<'ast, FStringFormatSpec<'ast>>>,
+    pub format_spec: Option<&'ast mut FStringFormatSpec<'ast>>,
 }
 
 impl Ranged for FStringExpressionElement<'_> {
@@ -1175,12 +1175,12 @@ impl ConversionFlag {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct DebugText {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DebugText<'ast> {
     /// The text between the `{` and the expression node.
-    pub leading: String,
+    pub leading: &'ast str,
     /// The text between the expression and the conversion, the `format_spec`, or the `}`, depending on what's present in the source
-    pub trailing: String,
+    pub trailing: &'ast str,
 }
 
 /// An AST node used to represent an f-string.
@@ -1222,7 +1222,7 @@ impl<'ast> FStringValue<'ast> {
     /// # Panics
     ///
     /// Panics if `values` is less than 2. Use [`FStringValue::single`] instead.
-    pub fn concatenated(values: Vec<FStringPart<'ast>>) -> Self {
+    pub fn concatenated(values: ruff_allocator::Vec<'ast, FStringPart<'ast>>) -> Self {
         assert!(values.len() > 1);
         Self {
             inner: FStringValueInner::Concatenated(values),
@@ -1330,7 +1330,7 @@ enum FStringValueInner<'ast> {
     Single(FStringPart<'ast>),
 
     /// An implicitly concatenated f-string i.e., `"foo" f"bar {x}"`.
-    Concatenated(Vec<FStringPart<'ast>>),
+    Concatenated(ruff_allocator::Vec<'ast, FStringPart<'ast>>),
 }
 
 /// An f-string part which is either a string literal or an f-string.
@@ -1547,8 +1547,8 @@ impl<'ast> From<FString<'ast>> for Expr<'ast> {
 }
 
 /// A newtype wrapper around a list of [`FStringElement`].
-#[derive(Default, PartialEq)]
-pub struct FStringElements<'ast>(Vec<FStringElement<'ast>>);
+#[derive(PartialEq)]
+pub struct FStringElements<'ast>(ruff_allocator::Vec<'ast, FStringElement<'ast>>);
 
 impl<'ast> FStringElements<'ast> {
     /// Returns an iterator over all the [`FStringLiteralElement`] nodes contained in this f-string.
@@ -1562,8 +1562,8 @@ impl<'ast> FStringElements<'ast> {
     }
 }
 
-impl<'ast> From<Vec<FStringElement<'ast>>> for FStringElements<'ast> {
-    fn from(elements: Vec<FStringElement<'ast>>) -> Self {
+impl<'ast> From<ruff_allocator::Vec<'ast, FStringElement<'ast>>> for FStringElements<'ast> {
+    fn from(elements: ruff_allocator::Vec<'ast, FStringElement<'ast>>) -> Self {
         FStringElements(elements)
     }
 }
@@ -1662,7 +1662,7 @@ impl<'ast> StringLiteralValue<'ast> {
     ///
     /// Panics if `strings` is less than 2. Use [`StringLiteralValue::single`]
     /// instead.
-    pub fn concatenated(strings: Vec<StringLiteral<'ast>>) -> Self {
+    pub fn concatenated(strings: ruff_allocator::Vec<'ast, StringLiteral<'ast>>) -> Self {
         assert!(strings.len() > 1);
         Self {
             inner: StringLiteralValueInner::Concatenated(ConcatenatedStringLiteral {
@@ -1734,10 +1734,10 @@ impl<'ast> StringLiteralValue<'ast> {
     ///
     /// Note that this will perform an allocation on the first invocation if the
     /// string value is implicitly concatenated.
-    pub fn to_str(&self) -> &str {
+    pub fn to_str(&self, allocator: &'ast Allocator) -> &str {
         match &self.inner {
             StringLiteralValueInner::Single(value) => value.as_str(),
-            StringLiteralValueInner::Concatenated(value) => value.to_str(),
+            StringLiteralValueInner::Concatenated(value) => value.to_str(allocator),
         }
     }
 }
@@ -1771,7 +1771,10 @@ impl PartialEq<str> for StringLiteralValue<'_> {
 
 impl fmt::Display for StringLiteralValue<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.to_str())
+        for c in self.chars() {
+            f.write_char(c)?;
+        }
+        Ok(())
     }
 }
 
@@ -1934,7 +1937,7 @@ impl fmt::Debug for StringLiteralFlags {
 
 /// An AST node that represents a single string literal which is part of an
 /// [`ExprStringLiteral`].
-#[derive(Default, Debug, PartialEq)]
+#[derive(Clone, Default, Debug, PartialEq)]
 pub struct StringLiteral<'ast> {
     pub range: TextRange,
     pub value: &'ast str,
@@ -1985,17 +1988,17 @@ impl<'ast> From<StringLiteral<'ast>> for Expr<'ast> {
 /// implicitly concatenated string.
 struct ConcatenatedStringLiteral<'ast> {
     /// Each string literal that makes up the concatenated string.
-    strings: Vec<StringLiteral<'ast>>,
+    strings: ruff_allocator::Vec<'ast, StringLiteral<'ast>>,
     /// The concatenated string value.
-    value: OnceLock<std::boxed::Box<str>>,
+    value: OnceLock<&'ast str>,
 }
 
 impl<'ast> ConcatenatedStringLiteral<'ast> {
     /// Extracts a string slice containing the entire concatenated string.
-    fn to_str(&self) -> &str {
+    fn to_str(&self, allocator: &'ast Allocator) -> &'ast str {
         self.value.get_or_init(|| {
             let concatenated: String = self.strings.iter().map(StringLiteral::as_str).collect();
-            std::boxed::Box::from(concatenated)
+            allocator.alloc_str(&concatenated)
         })
     }
 }
@@ -2017,7 +2020,6 @@ impl Debug for ConcatenatedStringLiteral<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ConcatenatedStringLiteral")
             .field("strings", &self.strings)
-            .field("value", &self.to_str())
             .finish()
     }
 }
@@ -2063,7 +2065,7 @@ impl<'ast> BytesLiteralValue<'ast> {
     ///
     /// Panics if `values` is less than 2. Use [`BytesLiteralValue::single`]
     /// instead.
-    pub fn concatenated(values: Vec<BytesLiteral<'ast>>) -> Self {
+    pub fn concatenated(values: ruff_allocator::Vec<'ast, BytesLiteral<'ast>>) -> Self {
         assert!(values.len() > 1);
         Self {
             inner: BytesLiteralValueInner::Concatenated(values),
@@ -2079,7 +2081,7 @@ impl<'ast> BytesLiteralValue<'ast> {
     pub fn as_slice(&self) -> &[BytesLiteral<'ast>] {
         match &self.inner {
             BytesLiteralValueInner::Single(value) => std::slice::from_ref(value),
-            BytesLiteralValueInner::Concatenated(value) => value.as_slice(),
+            BytesLiteralValueInner::Concatenated(value) => value,
         }
     }
 
@@ -2087,7 +2089,7 @@ impl<'ast> BytesLiteralValue<'ast> {
     fn as_mut_slice(&mut self) -> &mut [BytesLiteral<'ast>] {
         match &mut self.inner {
             BytesLiteralValueInner::Single(value) => std::slice::from_mut(value),
-            BytesLiteralValueInner::Concatenated(value) => value.as_mut_slice(),
+            BytesLiteralValueInner::Concatenated(value) => value,
         }
     }
 
@@ -2154,7 +2156,7 @@ enum BytesLiteralValueInner<'ast> {
     Single(BytesLiteral<'ast>),
 
     /// An implicitly concatenated bytes literals i.e., `b"foo" b"bar"`.
-    Concatenated(Vec<BytesLiteral<'ast>>),
+    Concatenated(ruff_allocator::Vec<'ast, BytesLiteral<'ast>>),
 }
 
 impl Default for BytesLiteralValueInner<'_> {
@@ -2280,7 +2282,7 @@ impl fmt::Debug for BytesLiteralFlags {
 
 /// An AST node that represents a single bytes literal which is part of an
 /// [`ExprBytesLiteral`].
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct BytesLiteral<'ast> {
     pub range: TextRange,
     pub value: &'ast [u8],
@@ -2696,7 +2698,7 @@ impl Ranged for ExprEllipsisLiteral {
 #[derive(Debug, PartialEq)]
 pub struct ExprAttribute<'ast> {
     pub range: TextRange,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
     pub attr: Identifier<'ast>,
     pub ctx: ExprContext,
 }
@@ -2711,8 +2713,8 @@ impl<'ast> From<ExprAttribute<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprSubscript<'ast> {
     pub range: TextRange,
-    pub value: Box<'ast, Expr<'ast>>,
-    pub slice: Box<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
+    pub slice: &'ast mut Expr<'ast>,
     pub ctx: ExprContext,
 }
 
@@ -2726,7 +2728,7 @@ impl<'ast> From<ExprSubscript<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprStarred<'ast> {
     pub range: TextRange,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
     pub ctx: ExprContext,
 }
 
@@ -2760,7 +2762,7 @@ impl<'ast> From<ExprName<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprList<'ast> {
     pub range: TextRange,
-    pub elts: Vec<Expr<'ast>>,
+    pub elts: ruff_allocator::Vec<'ast, Expr<'ast>>,
     pub ctx: ExprContext,
 }
 
@@ -2774,7 +2776,7 @@ impl<'ast> From<ExprList<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprTuple<'ast> {
     pub range: TextRange,
-    pub elts: Vec<Expr<'ast>>,
+    pub elts: ruff_allocator::Vec<'ast, Expr<'ast>>,
     pub ctx: ExprContext,
 
     /// Whether the tuple is parenthesized in the source code.
@@ -2791,9 +2793,9 @@ impl<'ast> From<ExprTuple<'ast>> for Expr<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExprSlice<'ast> {
     pub range: TextRange,
-    pub lower: Option<Box<'ast, Expr<'ast>>>,
-    pub upper: Option<Box<'ast, Expr<'ast>>>,
-    pub step: Option<Box<'ast, Expr<'ast>>>,
+    pub lower: Option<&'ast mut Expr<'ast>>,
+    pub upper: Option<&'ast mut Expr<'ast>>,
+    pub step: Option<&'ast mut Expr<'ast>>,
 }
 
 impl<'ast> From<ExprSlice<'ast>> for Expr<'ast> {
@@ -2947,7 +2949,7 @@ pub struct Comprehension<'ast> {
     pub range: TextRange,
     pub target: Expr<'ast>,
     pub iter: Expr<'ast>,
-    pub ifs: Vec<Expr<'ast>>,
+    pub ifs: ruff_allocator::Vec<'ast, Expr<'ast>>,
     pub is_async: bool,
 }
 
@@ -2961,9 +2963,9 @@ pub enum ExceptHandler<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct ExceptHandlerExceptHandler<'ast> {
     pub range: TextRange,
-    pub type_: Option<Box<'ast, Expr<'ast>>>,
+    pub type_: Option<&'ast mut Expr<'ast>>,
     pub name: Option<Identifier<'ast>>,
-    pub body: Vec<Stmt<'ast>>,
+    pub body: Suite<'ast>,
 }
 
 impl<'ast> From<ExceptHandlerExceptHandler<'ast>> for ExceptHandler<'ast> {
@@ -2977,7 +2979,7 @@ impl<'ast> From<ExceptHandlerExceptHandler<'ast>> for ExceptHandler<'ast> {
 pub struct Parameter<'ast> {
     pub range: TextRange,
     pub name: Identifier<'ast>,
-    pub annotation: Option<Box<'ast, Expr<'ast>>>,
+    pub annotation: Option<&'ast mut Expr<'ast>>,
 }
 
 /// See also [keyword](https://docs.python.org/3/library/ast.html#ast.keyword)
@@ -3001,7 +3003,7 @@ pub struct Alias<'ast> {
 pub struct WithItem<'ast> {
     pub range: TextRange,
     pub context_expr: Expr<'ast>,
-    pub optional_vars: Option<Box<'ast, Expr<'ast>>>,
+    pub optional_vars: Option<&'ast mut Expr<'ast>>,
 }
 
 /// See also [match_case](https://docs.python.org/3/library/ast.html#ast.match_case)
@@ -3009,8 +3011,8 @@ pub struct WithItem<'ast> {
 pub struct MatchCase<'ast> {
     pub range: TextRange,
     pub pattern: Pattern<'ast>,
-    pub guard: Option<Box<'ast, Expr<'ast>>>,
-    pub body: Vec<Stmt<'ast>>,
+    pub guard: Option<&'ast mut Expr<'ast>>,
+    pub body: Suite<'ast>,
 }
 
 /// See also [pattern](https://docs.python.org/3/library/ast.html#ast.pattern)
@@ -3045,7 +3047,7 @@ impl Pattern<'_> {
 #[derive(Debug, PartialEq)]
 pub struct PatternMatchValue<'ast> {
     pub range: TextRange,
-    pub value: Box<'ast, Expr<'ast>>,
+    pub value: &'ast mut Expr<'ast>,
 }
 
 impl<'ast> From<PatternMatchValue<'ast>> for Pattern<'ast> {
@@ -3055,7 +3057,7 @@ impl<'ast> From<PatternMatchValue<'ast>> for Pattern<'ast> {
 }
 
 /// See also [MatchSingleton](https://docs.python.org/3/library/ast.html#ast.MatchSingleton)
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PatternMatchSingleton {
     pub range: TextRange,
     pub value: Singleton,
@@ -3071,7 +3073,7 @@ impl From<PatternMatchSingleton> for Pattern<'_> {
 #[derive(Debug, PartialEq)]
 pub struct PatternMatchSequence<'ast> {
     pub range: TextRange,
-    pub patterns: Vec<Pattern<'ast>>,
+    pub patterns: ruff_allocator::Vec<'ast, Pattern<'ast>>,
 }
 
 impl<'ast> From<PatternMatchSequence<'ast>> for Pattern<'ast> {
@@ -3084,8 +3086,8 @@ impl<'ast> From<PatternMatchSequence<'ast>> for Pattern<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct PatternMatchMapping<'ast> {
     pub range: TextRange,
-    pub keys: Vec<Expr<'ast>>,
-    pub patterns: Vec<Pattern<'ast>>,
+    pub keys: ruff_allocator::Vec<'ast, Expr<'ast>>,
+    pub patterns: ruff_allocator::Vec<'ast, Pattern<'ast>>,
     pub rest: Option<Identifier<'ast>>,
 }
 
@@ -3099,7 +3101,7 @@ impl<'ast> From<PatternMatchMapping<'ast>> for Pattern<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct PatternMatchClass<'ast> {
     pub range: TextRange,
-    pub cls: Box<'ast, Expr<'ast>>,
+    pub cls: &'ast mut Expr<'ast>,
     pub arguments: PatternArguments<'ast>,
 }
 
@@ -3116,8 +3118,8 @@ impl<'ast> From<PatternMatchClass<'ast>> for Pattern<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct PatternArguments<'ast> {
     pub range: TextRange,
-    pub patterns: Vec<Pattern<'ast>>,
-    pub keywords: Vec<PatternKeyword<'ast>>,
+    pub patterns: ruff_allocator::Vec<'ast, Pattern<'ast>>,
+    pub keywords: ruff_allocator::Vec<'ast, PatternKeyword<'ast>>,
 }
 
 /// An AST node to represent the keyword arguments to a [`PatternMatchClass`], i.e., the
@@ -3148,7 +3150,7 @@ impl<'ast> From<PatternMatchStar<'ast>> for Pattern<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct PatternMatchAs<'ast> {
     pub range: TextRange,
-    pub pattern: Option<Box<'ast, Pattern<'ast>>>,
+    pub pattern: Option<&'ast mut Pattern<'ast>>,
     pub name: Option<Identifier<'ast>>,
 }
 
@@ -3162,7 +3164,7 @@ impl<'ast> From<PatternMatchAs<'ast>> for Pattern<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct PatternMatchOr<'ast> {
     pub range: TextRange,
-    pub patterns: Vec<Pattern<'ast>>,
+    pub patterns: ruff_allocator::Vec<'ast, Pattern<'ast>>,
 }
 
 impl<'ast> From<PatternMatchOr<'ast>> for Pattern<'ast> {
@@ -3184,8 +3186,8 @@ pub enum TypeParam<'ast> {
 pub struct TypeParamTypeVar<'ast> {
     pub range: TextRange,
     pub name: Identifier<'ast>,
-    pub bound: Option<Box<'ast, Expr<'ast>>>,
-    pub default: Option<Box<'ast, Expr<'ast>>>,
+    pub bound: Option<&'ast mut Expr<'ast>>,
+    pub default: Option<&'ast mut Expr<'ast>>,
 }
 
 impl<'ast> From<TypeParamTypeVar<'ast>> for TypeParam<'ast> {
@@ -3199,7 +3201,7 @@ impl<'ast> From<TypeParamTypeVar<'ast>> for TypeParam<'ast> {
 pub struct TypeParamParamSpec<'ast> {
     pub range: TextRange,
     pub name: Identifier<'ast>,
-    pub default: Option<Box<'ast, Expr<'ast>>>,
+    pub default: Option<&'ast mut Expr<'ast>>,
 }
 
 impl<'ast> From<TypeParamParamSpec<'ast>> for TypeParam<'ast> {
@@ -3213,7 +3215,7 @@ impl<'ast> From<TypeParamParamSpec<'ast>> for TypeParam<'ast> {
 pub struct TypeParamTypeVarTuple<'ast> {
     pub range: TextRange,
     pub name: Identifier<'ast>,
-    pub default: Option<Box<'ast, Expr<'ast>>>,
+    pub default: Option<&'ast mut Expr<'ast>>,
 }
 
 impl<'ast> From<TypeParamTypeVarTuple<'ast>> for TypeParam<'ast> {
@@ -3296,17 +3298,28 @@ impl Ranged for AnyParameterRef<'_, '_> {
 ///
 /// NOTE: This type differs from the original Python AST. See: [arguments](https://docs.python.org/3/library/ast.html#ast.arguments).
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq)]
 pub struct Parameters<'ast> {
     pub range: TextRange,
-    pub posonlyargs: Vec<ParameterWithDefault<'ast>>,
-    pub args: Vec<ParameterWithDefault<'ast>>,
-    pub vararg: Option<Box<'ast, Parameter<'ast>>>,
-    pub kwonlyargs: Vec<ParameterWithDefault<'ast>>,
-    pub kwarg: Option<Box<'ast, Parameter<'ast>>>,
+    pub posonlyargs: ruff_allocator::Vec<'ast, ParameterWithDefault<'ast>>,
+    pub args: ruff_allocator::Vec<'ast, ParameterWithDefault<'ast>>,
+    pub vararg: Option<&'ast mut Parameter<'ast>>,
+    pub kwonlyargs: ruff_allocator::Vec<'ast, ParameterWithDefault<'ast>>,
+    pub kwarg: Option<&'ast mut Parameter<'ast>>,
 }
 
 impl<'ast> Parameters<'ast> {
+    pub fn new_in(allocator: &'ast Allocator) -> Self {
+        Self {
+            range: TextRange::default(),
+            posonlyargs: ruff_allocator::vec![in allocator],
+            args: ruff_allocator::vec![in allocator],
+            vararg: None,
+            kwonlyargs: ruff_allocator::vec![in allocator],
+            kwarg: None,
+        }
+    }
+
     /// Returns an iterator over all non-variadic parameters included in this [`Parameters`] node.
     ///
     /// The variadic parameters (`.vararg` and `.kwarg`) can never have default values;
@@ -3314,8 +3327,8 @@ impl<'ast> Parameters<'ast> {
     pub fn iter_non_variadic_params(&self) -> impl Iterator<Item = &ParameterWithDefault<'ast>> {
         self.posonlyargs
             .iter()
-            .chain(&self.args)
-            .chain(&self.kwonlyargs)
+            .chain(&*self.args)
+            .chain(&*self.kwonlyargs)
     }
 
     /// Returns the [`ParameterWithDefault`] with the given name, or `None` if no such [`ParameterWithDefault`] exists.
@@ -3508,7 +3521,7 @@ impl<'a, 'ast> IntoIterator for &'a Parameters<'ast> {
 pub struct ParameterWithDefault<'ast> {
     pub range: TextRange,
     pub parameter: Parameter<'ast>,
-    pub default: Option<Box<'ast, Expr<'ast>>>,
+    pub default: Option<&'ast mut Expr<'ast>>,
 }
 
 /// An AST node used to represent the arguments passed to a function call or class definition.
@@ -3536,12 +3549,12 @@ pub struct ParameterWithDefault<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct Arguments<'ast> {
     pub range: TextRange,
-    pub args: &'ast mut [Expr<'ast>],
-    pub keywords: &'ast mut [Keyword<'ast>],
+    pub args: ruff_allocator::Vec<'ast, Expr<'ast>>,
+    pub keywords: ruff_allocator::Vec<'ast, Keyword<'ast>>,
 }
 
 /// An entry in the argument list of a function call.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ArgOrKeyword<'a, 'ast> {
     Arg(&'a Expr<'ast>),
     Keyword(&'a Keyword<'ast>),
@@ -3657,7 +3670,7 @@ impl<'ast> Arguments<'ast> {
 #[derive(Debug, PartialEq)]
 pub struct TypeParams<'ast> {
     pub range: TextRange,
-    pub type_params: Vec<TypeParam<'ast>>,
+    pub type_params: ruff_allocator::Vec<'ast, TypeParam<'ast>>,
 }
 
 impl<'ast> Deref for TypeParams<'ast> {

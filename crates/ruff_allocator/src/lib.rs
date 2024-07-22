@@ -3,6 +3,7 @@ use std::iter::FusedIterator;
 use std::ops::{Deref, DerefMut};
 use std::{borrow, fmt};
 
+pub use {bumpalo::collections::CollectIn, bumpalo::vec};
 pub type Allocator = bumpalo::Bump;
 
 pub type String<'allocator> = bumpalo::collections::String<'allocator>;
